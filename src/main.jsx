@@ -1,21 +1,41 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 
-function Registration() {
+function Access() {
+    const [login, setLogin] = useState(false)
     const [busy, setBusy] = useState(false)
     const [message, setMessage] = useState(null)
+    const [session, setSession] = useState(null)
 
-    async function register(event) {
+    useEffect(() => {
+        const controller = new AbortController()
+
+        async function restoreSession() {
+            try {
+                const response = await fetch('/api/session', { signal: controller.signal })
+                if (response.ok) {
+                    const active = await response.json()
+                    setSession(current => current ?? active)
+                }
+            } catch {
+                // El formulario sigue disponible si la consulta inicial falla.
+            }
+        }
+
+        restoreSession()
+        return () => controller.abort()
+    }, [])
+
+    async function submit(event) {
         event.preventDefault()
         const form = event.currentTarget
         const fields = Object.fromEntries(new FormData(form))
-
         setMessage(null)
         setBusy(true)
 
         try {
-            const response = await fetch('/api/register', {
+            const response = await fetch(login ? '/api/login' : '/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(fields),
@@ -28,12 +48,13 @@ function Registration() {
             }
 
             form.reset()
-            setMessage({ text: 'Tu cuenta quedó pendiente de revisión por Movilidad.' })
+            if (login) {
+                setSession(result)
+            } else {
+                setMessage({ text: 'Tu cuenta quedó pendiente de revisión por Movilidad.' })
+            }
         } catch {
-            setMessage({
-                error: true,
-                text: 'No se pudo enviar el registro. Inténtalo de nuevo.',
-            })
+            setMessage({ error: true, text: 'No se pudo enviar la solicitud. Inténtalo de nuevo.' })
         } finally {
             setBusy(false)
         }
@@ -42,46 +63,45 @@ function Registration() {
     return (
         <main>
             <p className="brand">Jalón USC</p>
-            <h1>Crea tu cuenta</h1>
+            {session ? (
+                <>
+                    <h1>Sesión iniciada</h1>
+                    <p>{session.email}</p>
+                </>
+            ) : (
+                <>
+                    <h1>{login ? 'Iniciar sesión' : 'Crea tu cuenta'}</h1>
+                    <form onSubmit={submit} aria-busy={busy} key={login ? 'login' : 'register'}>
+                        <label htmlFor="email">Correo institucional</label>
+                        <input id="email" name="email" type="email" autoComplete="email"
+                            placeholder="nombre@usc.edu.co" maxLength={254} required />
 
-            <form onSubmit={register} aria-busy={busy}>
-                <label htmlFor="email">Correo institucional</label>
-                <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    placeholder="nombre@usc.edu.co"
-                    maxLength={254}
-                    required
-                />
+                        <label htmlFor="password">Contraseña</label>
+                        <input id="password" name="password" type="password"
+                            autoComplete={login ? 'current-password' : 'new-password'}
+                            aria-describedby="password-help" minLength={10} maxLength={128} required />
 
-                <label htmlFor="password">Contraseña</label>
-                <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    autoComplete="new-password"
-                    aria-describedby="password-help"
-                    minLength={10}
-                    maxLength={128}
-                    required
-                />
-                <small id="password-help">Entre 10 y 128 caracteres.</small>
+                        <small id="password-help">Entre 10 y 128 caracteres.</small>
+                        <button disabled={busy}>
+                            {busy ? 'Procesando…' : login ? 'Entrar' : 'Crear cuenta'}
+                        </button>
+                    </form>
 
-                <button disabled={busy}>{busy ? 'Registrando…' : 'Crear cuenta'}</button>
-            </form>
+                    {message && (
+                        <p className={message.error ? 'notice error' : 'notice'}
+                            role={message.error ? 'alert' : 'status'}>{message.text}</p>
+                    )}
 
-            {message && (
-                <p
-                    className={message.error ? 'notice error' : 'notice'}
-                    role={message.error ? 'alert' : 'status'}
-                >
-                    {message.text}
-                </p>
+                    <button type="button" disabled={busy} onClick={() => {
+                        setLogin(current => !current)
+                        setMessage(null)
+                    }}>
+                        {login ? 'Crear una cuenta' : 'Ya tengo cuenta'}
+                    </button>
+                </>
             )}
         </main>
     )
 }
 
-createRoot(document.getElementById('root')).render(<Registration />)
+createRoot(document.getElementById('root')).render(<Access />)

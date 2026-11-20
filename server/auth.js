@@ -1,4 +1,4 @@
-import { argon2, randomBytes } from 'node:crypto'
+import { argon2, randomBytes, timingSafeEqual } from 'node:crypto'
 import { promisify } from 'node:util'
 import { requireRule } from './rules.js'
 
@@ -26,4 +26,22 @@ export async function hashPassword(password) {
     })
 
     return nonce.toString('hex') + ':' + tag.toString('hex')
+}
+
+export async function verifyPassword(password, stored) {
+    if (typeof password !== 'string' || password.length < 10 || password.length > 128) {
+        return false
+    }
+    if (typeof stored !== 'string' || !/^[0-9a-f]{32}:[0-9a-f]{64}$/i.test(stored)) {
+        return false
+    }
+
+    const [salt, hash] = stored.split(':')
+    const tag = await derive('argon2id', {
+        ...argonOptions,
+        nonce: Buffer.from(salt, 'hex'),
+        message: Buffer.from(password),
+    })
+
+    return timingSafeEqual(tag, Buffer.from(hash, 'hex'))
 }
