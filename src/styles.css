@@ -1,0 +1,96 @@
+:root {
+    font-family: system-ui, sans-serif;
+    color: #142d24;
+    background: #edf5ef;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 1rem;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+}
+
+#root {
+    width: min(100%, 26rem);
+}
+
+main {
+    background: #fff;
+    padding: clamp(1.25rem, 6vw, 2.25rem);
+    border: 1px solid #c7d9cd;
+    border-radius: 1rem;
+}
+
+.brand {
+    color: #176349;
+    font-weight: 750;
+    margin: 0;
+}
+
+h1 {
+    margin: 0.55rem 0 1.4rem;
+    font-size: 1.8rem;
+}
+
+form {
+    display: grid;
+    gap: 0.5rem;
+}
+
+label {
+    font-weight: 650;
+}
+
+input,
+button {
+    width: 100%;
+    font: inherit;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.5rem;
+}
+
+input {
+    margin-bottom: 0.45rem;
+    border: 1px solid #829e8d;
+}
+
+:focus-visible {
+    outline: 3px solid #176349;
+    outline-offset: 3px;
+}
+
+small {
+    color: #435d4f;
+}
+
+button {
+    margin-top: 0.6rem;
+    border: 0;
+    background: #145e47;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.notice {
+    background: #e7f4eb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin: 1rem 0 0;
+}
+
+.error {
+    background: #fae9e7;
+    color: #842a22;
+}
