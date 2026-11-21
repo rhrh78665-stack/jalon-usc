@@ -88,6 +88,25 @@ export async function openDatabase(path) {
     );
 
     CREATE INDEX IF NOT EXISTS trips_driver_depart_idx ON trips (driver_id, depart_at);
+
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS itinerary jsonb NOT NULL DEFAULT '[]';
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pricing jsonb;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS cancel_reason text;
+
+    CREATE TABLE IF NOT EXISTS reservations (
+      id text PRIMARY KEY,
+      trip_id text NOT NULL REFERENCES trips(id),
+      passenger_id text NOT NULL REFERENCES users(id),
+      board_index integer NOT NULL CHECK (board_index >= 0),
+      alight_index integer NOT NULL CHECK (alight_index > board_index),
+      status text NOT NULL DEFAULT 'Pendiente'
+        CHECK (status IN ('Pendiente', 'Confirmada', 'Rechazada', 'Cancelada', 'Vencida')),
+      maximum_cop integer NOT NULL CHECK (maximum_cop >= 0)
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS reservations_active_passenger_idx
+      ON reservations (trip_id, passenger_id) WHERE status IN ('Pendiente', 'Confirmada');
+    CREATE INDEX IF NOT EXISTS reservations_trip_status_idx ON reservations (trip_id, status);
   `)
     return db
 }

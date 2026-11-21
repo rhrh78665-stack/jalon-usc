@@ -48,6 +48,8 @@ label {
 }
 
 input,
+select,
+textarea,
 button {
     width: 100%;
     font: inherit;
@@ -55,7 +57,9 @@ button {
     border-radius: 0.5rem;
 }
 
-input {
+input,
+select,
+textarea {
     margin-bottom: 0.45rem;
     border: 1px solid #829e8d;
 }
@@ -94,3 +98,20 @@ button:disabled {
     background: #fae9e7;
     color: #842a22;
 }
+
+section + section { margin-top: 2rem; }
+fieldset { min-width: 0; border: 1px solid #c7d9cd; border-radius: .5rem; padding: .8rem; }
+fieldset > label { display: block; margin-top: .4rem; }
+legend { font-weight: 700; }
+.trip-list { list-style: none; padding: 0; }
+.trip-list > li, .trip-detail { border: 1px solid #c7d9cd; border-radius: .6rem; padding: 1rem; margin: .8rem 0; }
+.itinerary { padding-left: 1.4rem; }
+.itinerary li { margin: .55rem 0; }
+.itinerary small { display: block; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.actions button { width: auto; flex: 1; }
+.secondary { background: #e7f4eb; color: #145e47; border: 1px solid #829e8d; }
+.danger { background: #842a22; }
+.demo-note { color: #664b0c; background: #fff5d6; border-radius: .5rem; padding: .7rem; font-size: .9rem; }
+.date-list { display: flex; flex-wrap: wrap; gap: .4rem; padding-left: 1.2rem; }
+.date-list li { margin-right: 1rem; }
