@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-014: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-015: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -154,5 +154,29 @@ test('RF-011 a RF-014: itinerarios, búsqueda y gestión de viajes', async t => 
     assert.equal((await request(detailPath(trip.id), { user: null })).status, 401)
     const mine = await request('/api/trips/mine')
     assert.deepEqual(mine.data.find(item => item.id === trip.id), trip)
+  })
+
+  await t.test('CP-F015 edita el viaje propio, recalcula y lo refleja en búsqueda', async () => {
+    const day = nextDay()
+    const trip = await publish(valid(day))
+    const body = valid(day, { fuelPriceCopPerGallon: 18000, departAt: day + 'T07:00', stopTimes: ['07:00', '07:20', '07:40'].map(time => day + 'T' + time) })
+    const updated = await request(`/api/trips/${trip.id}`, { method: 'PUT', body })
+    assert.equal(updated.status, 200, JSON.stringify(updated.data))
+    assert.deepEqual(updated.data.itinerary.map(stop => stop.costToNextCop), [1800, 1200, null])
+    const found = await request(searchPath(day, { time: '07:40' }))
+    assert.equal(found.data.items[0].id, trip.id)
+    assert.equal(found.data.items[0].boardAt, updated.data.departAt)
+    assert.equal((await request(`/api/trips/${trip.id}`, { user: 'other', method: 'PUT', body })).status, 403)
+  })
+
+  await t.test('CP-F015 bloquea reservas pendientes y confirmadas sin guardar cambios', async () => {
+    for (const status of ['Pendiente', 'Confirmada']) {
+      const body = valid()
+      const trip = await publish(body)
+      await booking(trip, { status })
+      assert.equal((await request(`/api/trips/${trip.id}`, { method: 'PUT', body: { ...body, capacity: 3 } })).status, 409)
+      const { rows: [saved] } = await db.query('SELECT capacity FROM trips WHERE id = $1', [trip.id])
+      assert.equal(saved.capacity, 2)
+    }
   })
 })

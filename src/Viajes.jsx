@@ -13,6 +13,7 @@ export default function Viajes({ vehicles }) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
+  const [editing, setEditing] = useState(null)
   const formRef = useRef(null)
 
   useEffect(() => {
@@ -38,6 +39,23 @@ export default function Viajes({ vehicles }) {
 
   function resetForm() {
     setDraft(emptyDraft())
+    setEditing(null)
+  }
+
+  function editTrip(trip) {
+    const stops = labels.map(() => ({ id: '', time: '' }))
+    trip.route.forEach((id, index) => {
+      const slot = index === trip.route.length - 1 ? 3 : index
+      stops[slot] = { id, time: trip.itinerary[index]?.estimatedAt ? fechaFormulario(trip.itinerary[index].estimatedAt) : '' }
+    })
+    setDraft({
+      vehicleId: trip.vehicleId, departAt: fechaFormulario(trip.departAt),
+      capacity: String(trip.capacity), fuelPrice: String(trip.pricing?.fuelPriceCopPerGallon ?? precioGalonDemo), stops,
+    })
+    setEditing(trip.id)
+    setMessage(null)
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    formRef.current?.querySelector('select')?.focus()
   }
 
   function field(name, value) { setDraft(current => ({ ...current, [name]: value })) }
@@ -59,14 +77,14 @@ export default function Viajes({ vehicles }) {
     setSaving(true)
     setMessage(null)
     try {
-      const url = '/api/trips'
+      const url = editing ? `/api/trips/${encodeURIComponent(editing)}` : '/api/trips'
       const result = await api(url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const saved = Array.isArray(result) ? result : [result]
       setTrips(current => [...(current ?? []).filter(trip => !saved.some(item => item.id === trip.id)), ...saved]
         .sort((a, b) => a.departAt.localeCompare(b.departAt) || a.id.localeCompare(b.id)))
-      setMessage({ text: 'Viaje publicado.' })
+      setMessage({ text: editing ? 'Viaje actualizado.' : 'Viaje publicado.' })
       resetForm()
       window.dispatchEvent(new Event('jalon-trips-update'))
     } catch (error) {
@@ -88,11 +106,17 @@ export default function Viajes({ vehicles }) {
             <strong>{horaLocal.format(new Date(trip.departAt))} · {trip.status}</strong>
             <Itinerario trip={trip} />
             <p>{trip.capacity} cupos ofrecidos</p>
+            {['Programado', 'Lleno'].includes(trip.status) && <>
+              <div className="actions">
+                <button type="button" className="secondary" disabled={saving || new Date(trip.departAt) <= new Date()} onClick={() => editTrip(trip)}>Editar viaje</button>
+              </div>
 
+            </>}
           </li>)}
         </ul>
-        <h3>Publicar viaje</h3>
+        <h3>{editing ? 'Editar viaje' : 'Publicar viaje'}</h3>
         <p className="demo-note">Catálogo de demostración: distancias ficticias y precio de combustible de prueba.</p>
+        {editing && <p>Los cambios solo se guardan si el viaje no tiene reservas pendientes ni confirmadas.</p>}
         <form ref={formRef} onSubmit={publicar} aria-busy={saving}>
           <fieldset disabled={saving}>
             <legend>Datos de salida</legend>
@@ -130,7 +154,8 @@ export default function Viajes({ vehicles }) {
             </fieldset>
           })}
 
-          <button disabled={saving}>{saving ? 'Guardando…' : 'Publicar viaje'}</button>
+          <button disabled={saving}>{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Publicar viaje'}</button>
+          {editing && <button type="button" className="secondary" disabled={saving} onClick={resetForm}>Salir de edición</button>}
         </form>
       </>}
     </section>

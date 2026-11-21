@@ -124,4 +124,31 @@ export function mountTrips(app, db, approvedSession) {
   })
 
 
+
+  app.put('/api/trips/:id', async (req, res) => {
+    const { id } = await approvedSession(req)
+    const body = jsonBody(req)
+    const saved = await db.transaction(async tx => {
+      const { rows: [current] } = await tx.query(`SELECT ${campos} FROM trips WHERE id = $1 FOR UPDATE`, [req.params.id])
+      requireRule(current, 'No se encontró el viaje.', 404)
+      requireRule(current.driverId === id, 'Solo el propietario puede editar el viaje.', 403)
+      requireRule(['Programado', 'Lleno'].includes(current.status), 'El estado del viaje no permite editarlo.', 409)
+      const { rows } = await tx.query(
+        "SELECT id FROM reservations WHERE trip_id = $1 AND status IN ('Pendiente', 'Confirmada') LIMIT 1", [current.id],
+      )
+      requireRule(rows.length === 0, 'No puedes editar un viaje con reservas pendientes o confirmadas.', 409)
+      const trip = await preparar(tx, id, body)
+      const { rows: [updated] } = await tx.query(
+        `UPDATE trips SET vehicle_id = $2, depart_at = $3::timestamptz, capacity = $4,
+         route = $5::jsonb, itinerary = $6::jsonb, pricing = $7::jsonb, status = 'Programado'
+         WHERE id = $1 AND depart_at > clock_timestamp() AND $3::timestamptz > clock_timestamp()
+         RETURNING ${campos}`,
+        [current.id, trip.vehicleId, trip.departure, trip.capacity,
+          JSON.stringify(trip.route), JSON.stringify(trip.itinerary), JSON.stringify(trip.pricing)],
+      )
+      requireRule(updated, 'Solo puedes editar viajes futuros con una nueva salida futura.', 409)
+      return updated
+    })
+    res.json(saved)
+  })
 }
