@@ -70,6 +70,7 @@ export function mountTripClosing(app, db, approvedSession, informar) {
     for (const r of result.affected) {
       await informar([id, r.passenger_id], 'reservation-changed', { id: r.id, tripId: result.saved.id, status: r.status })
     }
+    await informar([id], 'trip-state-changed', { tripId: result.saved.id, status: result.saved.status })
     res.json(result.saved)
   })
 
@@ -104,6 +105,7 @@ export function mountTripClosing(app, db, approvedSession, informar) {
     for (const r of result.affected) {
       await informar([r.passenger_id], 'reservation-changed', { id: r.id, tripId: result.saved.id, status: r.status ?? 'Confirmada' })
     }
+    await informar([id], 'trip-state-changed', { tripId: result.saved.id, status: result.saved.status })
     res.json(result.saved)
   })
 }

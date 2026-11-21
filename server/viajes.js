@@ -126,7 +126,7 @@ export function mountTrips(app, db, approvedSession) {
   })
 
   app.get('/api/trips/search', async (req, res) => {
-    await approvedSession(req)
+    const { id } = await approvedSession(req)
     const { origin, destination, date, time } = req.query
     validarParadas(origin, destination)
     requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Selecciona una fecha válida.')
@@ -139,7 +139,7 @@ export function mountTrips(app, db, approvedSession) {
     const result = await db.transaction(async tx => {
       const { rows: trips } = await tx.query(
         `SELECT ${campos} FROM trips WHERE status IN ('Programado', 'Lleno')
-         AND depart_at > clock_timestamp() AND jsonb_array_length(itinerary) >= 2`,
+         AND depart_at > clock_timestamp() AND jsonb_array_length(itinerary) >= 2 AND driver_id <> $1`, [id],
       )
       const { rows: bookings } = await tx.query("SELECT * FROM reservations WHERE status = 'Confirmada'")
       const matches = []

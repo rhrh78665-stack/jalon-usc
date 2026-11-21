@@ -92,13 +92,13 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     const day = nextDay()
     const trip = await publish(valid(day, { capacity: 1 }))
     await booking(trip, { start: 0, end: 1 })
-    assert.equal((await request(searchPath(day))).data.total, 0)
-    const available = await request(searchPath(day, { origin: 'lido' }))
+    assert.equal((await request(searchPath(day), { user: 'passenger' })).data.total, 0)
+    const available = await request(searchPath(day, { origin: 'lido' }), { user: 'passenger' })
     assert.equal(available.data.total, 1)
     assert.equal(available.data.items[0].availableSeats, 1)
     await booking(trip, { passenger: 'other', start: 1, end: 2, status: 'Pendiente' })
-    assert.equal((await request(searchPath(day, { origin: 'lido' }))).data.total, 1)
-    assert.equal((await request(searchPath(day, { origin: 'usc', destination: 'melendez' }))).data.total, 0)
+    assert.equal((await request(searchPath(day, { origin: 'lido' }), { user: 'passenger' })).data.total, 1)
+    assert.equal((await request(searchPath(day, { origin: 'usc', destination: 'melendez' }), { user: 'passenger' })).data.total, 0)
     assert.equal((await request(detailPath(trip.id))).status, 409)
   })
 
@@ -107,6 +107,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     for (let i = 0; i < 3; i++) await publish(valid(day))
     const first = await request(searchPath(day, { pageSize: '2' }), { user: 'passenger' })
     const second = await request(searchPath(day, { pageSize: '2', page: '2' }), { user: 'passenger' })
+    assert.equal((await request(searchPath(day), { user: 'driver' })).data.total, 0)
     assert.equal(first.data.total, 3)
     assert.equal(first.data.items.length, 2)
     assert.equal(second.data.items.length, 1)
@@ -125,7 +126,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
         route: ['melendez', 'usc'], stopTimes: [day + 'T06:00', day + 'T' + arrival],
       }))).id
     }
-    const result = await request(searchPath(day, { time: '07:00' }))
+    const result = await request(searchPath(day, { time: '07:00' }), { user: 'passenger' })
     assert.deepEqual(result.data.items.map(trip => trip.id), [ids['07:00'], ids['06:55'], ids['06:20']])
   })
 
@@ -138,7 +139,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
         stopTimes: [day + 'T' + departure, day + 'T18:00'],
       }))).id
     }
-    const result = await request(searchPath(day, { origin: 'usc', destination: 'melendez', time: '17:00' }))
+    const result = await request(searchPath(day, { origin: 'usc', destination: 'melendez', time: '17:00' }), { user: 'passenger' })
     assert.deepEqual(result.data.items.map(trip => trip.id), [ids['17:00'], ids['17:40']])
   })
 
@@ -163,7 +164,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     const updated = await request(`/api/trips/${trip.id}`, { method: 'PUT', body })
     assert.equal(updated.status, 200, JSON.stringify(updated.data))
     assert.deepEqual(updated.data.itinerary.map(stop => stop.costToNextCop), [1800, 1200, null])
-    const found = await request(searchPath(day, { time: '07:40' }))
+    const found = await request(searchPath(day, { time: '07:40' }), { user: 'passenger' })
     assert.equal(found.data.items[0].id, trip.id)
     assert.equal(found.data.items[0].boardAt, updated.data.departAt)
     assert.equal((await request(`/api/trips/${trip.id}`, { user: 'other', method: 'PUT', body })).status, 403)
@@ -209,7 +210,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     assert.equal(response.data.status, 'Cancelado')
     const { rows } = await db.query('SELECT status FROM reservations WHERE trip_id = $1', [trip.id])
     assert.deepEqual(rows.map(row => row.status), ['Cancelada', 'Cancelada'])
-    assert.equal((await request(searchPath(day))).data.total, 0)
+    assert.equal((await request(searchPath(day), { user: 'passenger' })).data.total, 0)
     assert.equal((await request(detailPath(trip.id))).status, 404)
     assert.deepEqual((await cancel()).data, response.data)
   })
