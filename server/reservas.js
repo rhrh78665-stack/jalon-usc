@@ -39,6 +39,12 @@ async function confirmadas(tx, tripId) {
   return rows
 }
 
+async function actualizarDisponibilidad(tx, trip) {
+  const quote = cotizar(trip, await confirmadas(tx, trip.id), trip.route[0], trip.route.at(-1))
+  const status = quote.segments.every(segment => segment.availableSeats === 0) ? 'Lleno' : 'Programado'
+  if (status !== trip.status) await tx.query('UPDATE trips SET status = $2 WHERE id = $1', [trip.id, status])
+}
+
 async function consultarReserva(tx, id) {
   const { rows: [booking] } = await tx.query(
     `SELECT ${campos} FROM reservations r JOIN trips t ON t.id = r.trip_id WHERE r.id = $1`, [id],
@@ -107,7 +113,7 @@ export function mountReservations(app, db, approvedSession, informar) {
       )
       requireRule(cancelled, 'La postulación del viaje está cerrada.', 409)
       if (booking.status === 'Confirmada') {
-        if (trip.status === 'Lleno') await tx.query("UPDATE trips SET status = 'Programado' WHERE id = $1", [trip.id])
+        await actualizarDisponibilidad(tx, trip)
         const pickup = trip.itinerary[booking.board_index]?.estimatedAt
         if (pickup) {
           const { rows: [window] } = await tx.query(
@@ -164,13 +170,10 @@ export function mountReservations(app, db, approvedSession, informar) {
         )
         requireRule(open, 'La postulación del viaje está cerrada.', 409)
 
-        const after = cotizar(trip, [...current, { ...booking, status }], trip.route[0], trip.route.at(-1))
-        if (after.segments.every(segment => segment.availableSeats === 0)) {
-          await tx.query("UPDATE trips SET status = 'Lleno' WHERE id = $1", [trip.id])
-        }
       }
 
       await tx.query('UPDATE reservations SET status = $2 WHERE id = $1', [booking.id, status])
+      if (status === 'Confirmada') await actualizarDisponibilidad(tx, trip)
       return { booking: await consultarReserva(tx, booking.id), passengerId: booking.passenger_id }
     })
     await informar([id, passengerId], result)

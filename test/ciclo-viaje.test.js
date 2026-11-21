@@ -92,4 +92,14 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     assert.equal((await solicitar(trip)).status, 403)
     await db.query("UPDATE users SET suspended_until = NULL WHERE id = 'passenger'")
   })
+
+  await t.test('CP-F022 marca Lleno solo si todos los tramos están ocupados y reabre al cancelar', async () => {
+    const trip = await publish(valid(undefined, { capacity: 1 }))
+    const left = await confirmar(trip, 'passenger', 'melendez', 'lido')
+    assert.equal(await state(trip), 'Programado')
+    await confirmar(trip, 'other', 'lido', 'usc')
+    assert.equal(await state(trip), 'Lleno')
+    assert.equal((await cancelar(left.id)).status, 200)
+    assert.equal(await state(trip), 'Programado')
+  })
 })
