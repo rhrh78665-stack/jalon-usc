@@ -23,9 +23,14 @@ function Panel({ session, busy, signOut }) {
        ['publicados', 'Mis viajes', '↔'], ['vehiculos', 'Vehículos', '▱'], ['perfil', 'Perfil', '◉']]
   return (
     <div className="workspace">
-      <aside className="sidebar">
+      <header className="workspace-header">
         <div className="workspace-brand"><span aria-hidden="true">J</span><strong>Jalón USC</strong></div>
-        <nav aria-label="Secciones de Jalón USC">
+        <div className="account">
+          <span>{session.email}</span>
+          <button type="button" disabled={busy} onClick={signOut}>{busy ? 'Cerrando…' : 'Cerrar sesión'}</button>
+        </div>
+      </header>
+        <nav className="workspace-tabs" aria-label="Secciones de Jalón USC">
           {sections.map(([id, label, icon]) => (
             <button key={id} type="button" aria-current={active === id ? 'page' : undefined}
               aria-controls={id === 'publicados' || id === 'vehiculos' ? 'panel-conductor' : 'panel-' + id}
@@ -34,11 +39,6 @@ function Panel({ session, busy, signOut }) {
             </button>
           ))}
         </nav>
-        <div className="account">
-          <span>{session.email}</span>
-          <button type="button" disabled={busy} onClick={signOut}>{busy ? 'Cerrando…' : 'Cerrar sesión'}</button>
-        </div>
-      </aside>
       <div className="workspace-content">
         {!session.mobility && <AvisosViajes />}
         {session.mobility && <div id="panel-movilidad" className="workspace-panel" hidden={active !== 'movilidad'}><Movilidad /></div>}

@@ -131,17 +131,21 @@ legend { font-weight: 700; }
     border-radius: 1.25rem;
 }
 
-.workspace { display: grid; grid-template-columns: 15rem minmax(0, 1fr); min-height: min(47rem, 85dvh); }
-.sidebar {
+[hidden] { display: none !important; }
+
+.workspace { min-height: min(43rem, 78dvh); }
+.workspace-header {
     display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    padding: 1.5rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    padding: 1rem clamp(1rem, 3.5vw, 2.75rem);
     color: #ecf8f1;
     background: #133a32;
-    border-radius: 1.2rem 0 0 1.2rem;
+    border-radius: 1.2rem 1.2rem 0 0;
 }
-.workspace-brand { display: flex; align-items: center; gap: .65rem; padding: 0 .35rem; font-size: 1.25rem; }
+.workspace-brand { display: flex; align-items: center; gap: .65rem; font-size: 1.25rem; }
 .workspace-brand span {
     display: grid;
     place-items: center;
@@ -152,20 +156,29 @@ legend { font-weight: 700; }
     background: #bdeccf;
     font-weight: 800;
 }
-.sidebar nav { display: grid; gap: .35rem; }
-.sidebar button {
-    margin: 0;
-    text-align: left;
-    background: transparent;
-    color: inherit;
+.account { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1rem; }
+.account span { overflow-wrap: anywhere; color: #d5e9de; font-size: .85rem; }
+.account button { width: auto; margin: 0; background: #245247; }
+.account button:focus-visible { outline-color: #bdeccf; }
+.workspace-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
+    padding: .35rem clamp(.6rem, 3.5vw, 2.75rem) 0;
+    background: #fff;
+    border-bottom: 1px solid #dce7e2;
 }
-.sidebar button:hover { background: #245247; }
-.sidebar button[aria-current] { background: #e2f5e9; color: #153b32; }
-.sidebar button:focus-visible { outline-color: #bdeccf; }
-.sidebar nav button span { display: inline-block; width: 1.65rem; font-size: 1.05rem; }
-.account { margin-top: auto; border-top: 1px solid #527269; padding: 1rem .35rem 0; }
-.account span { overflow-wrap: anywhere; color: #d5e9de; font-size: .84rem; }
-.account button { margin-top: .45rem; padding-inline: .3rem; }
+.workspace-tabs button {
+    width: auto;
+    margin: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: .5rem .5rem 0 0;
+    color: #2e5145;
+    background: transparent;
+}
+.workspace-tabs button:hover { background: #f1f7f4; }
+.workspace-tabs button[aria-current] { border-bottom-color: #176349; background: #e5f4eb; color: #133a32; }
+.workspace-tabs button span { margin-right: .35rem; }
 .workspace-content { min-width: 0; padding: clamp(1rem, 3.5vw, 2.75rem); }
 .workspace-content > .notice { margin: 0 0 1rem; }
 .workspace-panel > section,
@@ -195,13 +208,9 @@ legend { font-weight: 700; }
 @media (max-width: 740px) {
     body { padding: .6rem; place-items: start center; }
     .auth-shell { margin-top: 2rem; }
-    .workspace { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-    .sidebar { border-radius: 1.2rem 1.2rem 0 0; gap: .65rem; padding: .8rem; }
-    .sidebar nav { display: flex; flex-wrap: wrap; }
-    .sidebar nav button { width: auto; padding: .45rem .55rem; font-size: .85rem; }
-    .sidebar nav button span { width: 1.1rem; }
-    .account { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding-top: .35rem; }
-    .account button { width: auto; margin-top: 0; font-size: .83rem; }
+    .workspace { min-height: 0; }
+    .workspace-tabs button { font-size: .85rem; padding: .5rem .55rem; }
+    .account button { font-size: .83rem; }
 }
 
 @media (max-width: 450px) {
