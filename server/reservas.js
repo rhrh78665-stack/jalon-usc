@@ -45,7 +45,7 @@ async function consultarReserva(tx, id) {
   return booking
 }
 
-export function mountReservations(app, db, approvedSession) {
+export function mountReservations(app, db, approvedSession, informar) {
   app.get('/api/reservations', async (req, res) => {
     const { id } = await approvedSession(req)
     const { rows } = await db.query(
@@ -63,7 +63,7 @@ export function mountReservations(app, db, approvedSession) {
     const { origin, destination } = req.body ?? {}
     validarParadas(origin, destination)
 
-    const booking = await db.transaction(async tx => {
+    const { booking, driverId } = await db.transaction(async tx => {
       const trip = await cargarViaje(tx, req.params.id)
       verificarApertura(trip)
       requireRule(trip.driverId !== id, 'No puedes solicitar un asiento en tu propio viaje.', 403)
@@ -79,8 +79,9 @@ export function mountReservations(app, db, approvedSession) {
         [randomUUID(), trip.id, id, trip.route.indexOf(origin), trip.route.indexOf(destination), quote.maximumCop],
       )
       requireRule(saved, 'Ya tienes una solicitud activa o la postulación cerró.', 409)
-      return consultarReserva(tx, saved.id)
+      return { booking: await consultarReserva(tx, saved.id), driverId: trip.driverId }
     })
+    await informar([id, driverId], booking)
     res.status(201).json(booking)
   })
 
@@ -90,7 +91,7 @@ export function mountReservations(app, db, approvedSession) {
     const { decision } = req.body ?? {}
     requireRule(['confirmar', 'rechazar'].includes(decision), 'Selecciona confirmar o rechazar.')
 
-    const result = await db.transaction(async tx => {
+    const { booking: result, passengerId } = await db.transaction(async tx => {
       const { rows: [reference] } = await tx.query(
         'SELECT trip_id FROM reservations WHERE id = $1', [req.params.id],
       )
@@ -130,8 +131,9 @@ export function mountReservations(app, db, approvedSession) {
       }
 
       await tx.query('UPDATE reservations SET status = $2 WHERE id = $1', [booking.id, status])
-      return consultarReserva(tx, booking.id)
+      return { booking: await consultarReserva(tx, booking.id), passengerId: booking.passenger_id }
     })
+    await informar([id, passengerId], result)
     res.json(result)
   })
 }

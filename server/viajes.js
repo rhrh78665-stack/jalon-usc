@@ -60,22 +60,22 @@ function enteroConsulta(value, fallback, max) {
 }
 
 export function mountTrips(app, db, approvedSession) {
-  mountReservations(app, db, approvedSession)
   const listeners = new Map()
 
   // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
-  async function informar(userIds, trip) {
+  async function informar(userIds, event, data) {
     await Promise.all([...new Set(userIds)].flatMap(id => [...(listeners.get(id) ?? [])].map(async listener => {
       try {
         await approvedSession(listener.req)
-        listener.res.write(`event: trip-cancelled\ndata: ${JSON.stringify({
-          tripId: trip.id, status: trip.status, reason: trip.cancelReason,
-        })}\n\n`)
+        listener.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
       } catch {
         listener.res.end()
       }
     })))
   }
+
+  mountReservations(app, db, approvedSession, (participants, booking) =>
+    informar(participants, 'reservation-changed', { id: booking.id, tripId: booking.tripId, status: booking.status }))
 
   app.get('/api/trips/events', async (req, res) => {
     const { id } = await approvedSession(req)
@@ -228,7 +228,9 @@ export function mountTrips(app, db, approvedSession) {
       )
       return { trip: saved, participants: [id, ...cancelled.map(booking => booking.passenger_id)] }
     })
-    await informar(result.participants, result.trip)
+    await informar(result.participants, 'trip-cancelled', {
+      tripId: result.trip.id, status: result.trip.status, reason: result.trip.cancelReason,
+    })
     res.json(result.trip)
   })
 }

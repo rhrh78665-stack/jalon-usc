@@ -110,4 +110,50 @@ test('RF-018 a RF-020: solicitudes y decisiones de reserva', async t => {
     assert.match(conflict.data.message, /otra reserva.*horario/)
     assert.equal((await bandeja('passenger')).data.find(item => item.id === overlap.id).status, 'Pendiente')
   })
+
+  await t.test('CP-F020 informa a participantes y lee el estado vigente al reconectar', async () => {
+    assert.equal((await fetch(base + '/api/trips/events')).status, 401)
+    const controllers = []
+    async function connect(user) {
+      const controller = new AbortController()
+      controllers.push(controller)
+      const response = await fetch(base + '/api/trips/events', {
+        headers: { Cookie: cookies[user] }, signal: controller.signal,
+      })
+      assert.equal(response.status, 200)
+      const reader = response.body.getReader()
+      assert.match(new TextDecoder().decode((await reader.read()).value), /event: ready/)
+      return { reader, controller }
+    }
+
+    try {
+      const trip = await publish(valid())
+      const driver = await connect('driver')
+      const outsider = await connect('outsider')
+      const passenger = await connect('passenger')
+      function next(reader) {
+        return Promise.race([reader.read(), new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error('No llegó el evento de reserva.')), 2500)
+          timer.unref()
+        })]).then(data => new TextDecoder().decode(data.value))
+      }
+      const fetchDriver = next(driver.reader)
+      const fetchPassenger = next(passenger.reader)
+      const outside = outsider.reader.read().then(() => 'event', () => 'closed')
+      const saved = (await solicitar(trip)).data
+      assert.match(await fetchDriver, /reservation-changed[\s\S]*Pendiente/)
+      assert.match(await fetchPassenger, /reservation-changed[\s\S]*Pendiente/)
+      assert.equal((await bandeja('driver')).data.find(item => item.id === saved.id).status, 'Pendiente')
+      passenger.controller.abort()
+
+      const fetchDecision = next(driver.reader)
+      assert.equal((await decidir(saved.id)).status, 200)
+      assert.match(await fetchDecision, /reservation-changed[\s\S]*Confirmada/)
+      await connect('passenger')
+      assert.equal((await bandeja('passenger')).data.find(item => item.id === saved.id).status, 'Confirmada')
+      assert.equal(await Promise.race([outside, new Promise(resolve => setTimeout(resolve, 120, 'quiet'))]), 'quiet')
+    } finally {
+      controllers.forEach(controller => controller.abort())
+    }
+  })
 })
