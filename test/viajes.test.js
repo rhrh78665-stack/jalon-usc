@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { createApp } from '../server/app.js'
 import { hashPassword } from '../server/auth.js'
 import { openDatabase } from '../server/db.js'
+import { horaLocal } from '../server/itinerarios.js'
 
 test('CP-F010 Publicar viaje', async t => {
   const db = await openDatabase()
@@ -53,7 +54,11 @@ test('CP-F010 Publicar viaje', async t => {
   const driver = await login('conductor@usc.edu.co')
   const member = await login('miembro@usc.edu.co')
   const departAt = new Date(Date.now() + 19 * 60 * 60 * 1000).toISOString().slice(0, 16)
-  const valid = { vehicleId: 'vehicle-a', departAt, capacity: 4, route: ['melendez', 'lido', 'usc'] }
+  const stopTimes = [0, 10, 20].map(minutes => horaLocal(new Date(new Date(departAt + ':00-05:00').getTime() + minutes * 60000)))
+  const valid = {
+    vehicleId: 'vehicle-a', departAt, capacity: 4, route: ['melendez', 'lido', 'usc'],
+    stopTimes, fuelPriceCopPerGallon: 15000,
+  }
   const publish = (cookie, body) => request('/api/trips', cookie, body)
 
   assert.equal((await publish(null, valid)).status, 401)
@@ -74,12 +79,12 @@ test('CP-F010 Publicar viaje', async t => {
   assert.equal(response.status, 201)
   const trip = await response.json()
   assert.ok(trip.id)
-  assert.deepEqual(trip, {
-    ...valid,
-    id: trip.id,
-    departAt: new Date(departAt + ':00-05:00').toISOString(),
-    status: 'Programado',
-  })
+  assert.equal(trip.vehicleId, valid.vehicleId)
+  assert.equal(trip.capacity, valid.capacity)
+  assert.deepEqual(trip.route, valid.route)
+  assert.equal(trip.departAt, new Date(departAt + ':00-05:00').toISOString())
+  assert.equal(trip.status, 'Programado')
+  assert.deepEqual(trip.itinerary.map(stop => stop.estimatedAt), stopTimes.map(value => new Date(value + ':00-05:00').toISOString()))
   assert.deepEqual(await (await request('/api/trips/mine', driver)).json(), [trip])
   assert.deepEqual(await (await request('/api/trips/mine', member)).json(), [])
 })

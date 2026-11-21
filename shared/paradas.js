@@ -5,10 +5,13 @@ export const paradas = [
   { id: 'usc', nombre: 'Campus USC' },
 ]
 
+// Catálogo ficticio para la demostración; no representa distancias viales medidas.
 export const tramos = [
-  ['melendez', 'lido'],
-  ['lido', 'usc'],
-  ['melendez', 'usc'],
-  ['unicentro', 'melendez'],
-  ['unicentro', 'usc'],
+  { from: 'melendez', to: 'lido', distanceKm: 3, tollCop: 0, active: true },
+  { from: 'lido', to: 'usc', distanceKm: 2, tollCop: 0, active: true },
+  { from: 'melendez', to: 'usc', distanceKm: 4, tollCop: 0, active: true },
+  { from: 'unicentro', to: 'melendez', distanceKm: 2, tollCop: 0, active: true },
+  { from: 'unicentro', to: 'usc', distanceKm: 5, tollCop: 0, active: true },
 ]
+
+export const precioGalonDemo = 15000

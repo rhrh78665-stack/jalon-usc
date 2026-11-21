@@ -88,6 +88,11 @@ export async function openDatabase(path) {
     );
 
     CREATE INDEX IF NOT EXISTS trips_driver_depart_idx ON trips (driver_id, depart_at);
+
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS itinerary jsonb NOT NULL DEFAULT '[]';
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS pricing jsonb;
+
+
   `)
     return db
 }
