@@ -1,5 +1,5 @@
 import { registrarAdvertencia } from './advertencias.js'
-import { calcularLiquidacion } from './liquidacion.js'
+import { calcularLiquidacion, verificarLiquidacion } from './liquidacion.js'
 import { requireRule } from './rules.js'
 
 async function cargarPropio(tx, tripId, driverId) {
@@ -25,7 +25,8 @@ function aplicarAsistencia(reservas, marcas) {
   const porReserva = new Map()
   const ids = new Set(reservas.map(r => r.id))
   for (const marca of marcas) {
-    requireRule(ids.has(marca?.id) && !porReserva.has(marca.id) && ['Abordo', 'Ausente'].includes(marca.attendance),
+    requireRule(ids.has(marca?.id) && !porReserva.has(marca.id) && ['Abordo', 'Ausente'].includes(marca.attendance) &&
+      Object.keys(marca).every(key => key === 'id' || key === 'attendance'),
       'Revisa las marcas de asistencia de las reservas confirmadas.')
     porReserva.set(marca.id, marca.attendance)
   }
@@ -75,14 +76,18 @@ export function mountTripClosing(app, db, approvedSession, informar) {
   app.post('/api/trips/:id/finish', async (req, res) => {
     const { id } = await approvedSession(req)
     requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    const body = req.body ?? {}
+    requireRule(!Array.isArray(body) && Object.keys(body).every(key => key === 'asistencia'),
+      'El cierre solo acepta marcas de asistencia. Los importes se calculan en el servidor.')
     const result = await db.transaction(async tx => {
       const trip = await cargarPropio(tx, req.params.id, id)
       if (trip.status === 'Completado' && trip.liquidation) {
         return { saved: { id: trip.id, status: trip.status, liquidation: trip.liquidation }, affected: [] }
       }
       requireRule(trip.status === 'EnCurso', 'Solo un viaje en curso se puede cerrar.', 409)
-      const reservas = aplicarAsistencia(await confirmadas(tx, trip.id), req.body?.asistencia ?? [])
+      const reservas = aplicarAsistencia(await confirmadas(tx, trip.id), body.asistencia ?? [])
       const liquidation = calcularLiquidacion(trip, reservas)
+      verificarLiquidacion(liquidation, trip, reservas)
       for (const r of [...reservas].sort((a, b) => a.passenger_id.localeCompare(b.passenger_id))) {
         await tx.query('UPDATE reservations SET attendance = $2 WHERE id = $1', [r.id, r.attendance])
         if (r.attendance === 'Ausente') {

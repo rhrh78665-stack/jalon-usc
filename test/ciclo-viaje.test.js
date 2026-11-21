@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { fijarCostos, horaLocal } from '../server/itinerarios.js'
-import { calcularLiquidacion } from '../server/liquidacion.js'
+import { calcularLiquidacion, verificarLiquidacion } from '../server/liquidacion.js'
 import { expirarPendientes } from '../server/reservas.js'
 
 test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
@@ -180,5 +180,22 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     const retry = await close(completed, [])
     assert.deepEqual(retry.data.liquidation, liquidation)
     assert.equal((await db.query("SELECT count(*)::int AS n FROM booking_warnings WHERE reservation_id = $1 AND reason = 'ausencia'", [absent.id])).rows[0].n, 1)
+  })
+
+  await t.test('CP-F027 rechaza reparto inconsistente y revierte el cierre si supera el máximo registrado', async () => {
+    const trip = await publish(valid())
+    const booking = await confirmar(trip)
+    await started(trip)
+    await db.query('UPDATE reservations SET maximum_cop = 1 WHERE id = $1', [booking.id])
+    assert.equal((await close(trip, [{ id: booking.id, attendance: 'Abordo' }])).status, 409)
+    const { rows: [persisted] } = await db.query('SELECT status, liquidation FROM trips WHERE id = $1', [trip.id])
+    assert.deepEqual(persisted, { status: 'EnCurso', liquidation: null })
+    assert.equal((await db.query('SELECT attendance FROM reservations WHERE id = $1', [booking.id])).rows[0].attendance, null)
+    const fixture = { itinerary: [{ stopId: 'a', costToNextCop: 3 }, { stopId: 'b' }] }
+    const reservations = [{ id: 'r', board_index: 0, alight_index: 1, attendance: 'Abordo', maximum_cop: 1 }]
+    const calculated = calcularLiquidacion(fixture, reservations)
+    verificarLiquidacion(calculated, fixture, reservations)
+    calculated.tramos[0].conductorCop = 1
+    assert.throws(() => verificarLiquidacion(calculated, fixture, reservations), /conserva/)
   })
 })

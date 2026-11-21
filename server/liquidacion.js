@@ -24,3 +24,28 @@ export function calcularLiquidacion(trip, reservas) {
   requireRule(reservas.every(r => aportes[r.id] <= r.maximum_cop), 'Un aporte supera el máximo de su reserva.', 409)
   return { totalCop, conductorCop, aportes, tramos }
 }
+
+export function verificarLiquidacion(liquidacion, trip, reservas) {
+  const sumas = new Map(reservas.map(r => [r.id, 0]))
+  let total = 0
+  let conductor = 0
+  for (const [position, tramo] of liquidacion.tramos.entries()) {
+    const { costoCop } = tramo
+    requireRule(costoCop === trip.itinerary[position]?.costToNextCop, 'El costo del tramo no coincide.', 409)
+    let suma = tramo.conductorCop
+    for (const [id, monto] of Object.entries(tramo.aportes)) {
+      requireRule(sumas.has(id) && Number.isSafeInteger(monto) && monto >= 0 &&
+        monto <= Math.floor(costoCop / 2), 'Un aporte supera el tope del tramo.', 409)
+      suma += monto
+      sumas.set(id, sumas.get(id) + monto)
+    }
+    requireRule(suma === costoCop && tramo.conductorCop >= 0, 'El reparto no conserva el costo del tramo.', 409)
+    total += costoCop
+    conductor += tramo.conductorCop
+  }
+  requireRule(liquidacion.tramos.length === trip.itinerary.length - 1 &&
+    total === liquidacion.totalCop && conductor === liquidacion.conductorCop,
+    'El desglose de la liquidación está incompleto.', 409)
+  requireRule(reservas.every(r => sumas.get(r.id) === liquidacion.aportes[r.id] && sumas.get(r.id) <= r.maximum_cop),
+    'Un aporte supera el máximo de su reserva.', 409)
+}
