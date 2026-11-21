@@ -1,8 +1,10 @@
+import { configurarCorreo } from './correo.js'
 import express from 'express'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword, verifyPassword } from './auth.js'
 import { mountMobility } from './movilidad.js'
 import { mountVehicles } from './vehiculos.js'
+import { mountRecovery } from './enlaces-cuenta.js'
 import { institutionalEmail, requireRule, RuleError } from './rules.js'
 
 const sessionMaxAge = 8 * 60 * 60 * 1000
@@ -48,7 +50,7 @@ function sessionView(user) {
     return user.mobility ? { email: user.email, mobility: true } : { email: user.email }
 }
 
-export function createApp(db, dist) {
+export function createApp(db, dist, mail = configurarCorreo(process.env, Number(process.env.PORT ?? 3000))) {
     const app = express()
     app.disable('x-powered-by')
     app.use('/api', (_req, res, next) => {
@@ -96,9 +98,10 @@ export function createApp(db, dist) {
         await db.transaction(async (tx) => {
             const { rows } = await tx.query(
                 `INSERT INTO sessions (token_hash, user_id, expires_at)
-         SELECT $1, id, $2 FROM users WHERE id = $3 AND status = 'approved'
+         SELECT $1, id, $2 FROM users WHERE id = $3 AND status = 'approved' AND password = $4
+         FOR SHARE
          RETURNING user_id`,
-                [tokenDigest(token), new Date(Date.now() + sessionMaxAge).toISOString(), user.id],
+        [tokenDigest(token), new Date(Date.now() + sessionMaxAge).toISOString(), user.id, user.password],
             )
             requireRule(rows.length === 1, credentialsError, 401)
             if (previous) {
@@ -129,6 +132,7 @@ export function createApp(db, dist) {
 
     mountMobility(app, db, req => approvedSession(db, req))
     mountVehicles(app, db, req => approvedSession(db, req))
+  mountRecovery(app, db, mail)
 
     if (dist) app.use(express.static(dist))
     app.use((error, _req, res, _next) => {

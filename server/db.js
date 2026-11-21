@@ -13,6 +13,16 @@ export async function openDatabase(path) {
       status text NOT NULL CHECK(status IN ('pending', 'approved', 'rejected'))
     );
 
+
+    CREATE TABLE IF NOT EXISTS account_links (
+      user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      purpose text NOT NULL CHECK (purpose IN ('recover', 'verify')),
+      token_hash text NOT NULL UNIQUE,
+      issued_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at timestamptz NOT NULL,
+      PRIMARY KEY (user_id, purpose)
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       token_hash text PRIMARY KEY,
       user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,

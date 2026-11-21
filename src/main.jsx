@@ -2,13 +2,32 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
 import Vehiculos from './Vehiculos.jsx'
+import { EnlacesCuenta } from './Cuenta.jsx'
 import './styles.css'
 
+function readAccountLink() {
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  const action = params.get('action')
+  const token = params.get('token')
+  return token && action === 'recover' ? { action, token } : null
+}
+
 function Access() {
+  const [accountLink, setAccountLink] = useState(readAccountLink)
     const [login, setLogin] = useState(false)
     const [busy, setBusy] = useState(true)
     const [message, setMessage] = useState(null)
     const [session, setSession] = useState(null)
+
+  useEffect(() => {
+    function updateAccountLink() {
+      const link = readAccountLink()
+      if (link) setAccountLink(link)
+    }
+
+    window.addEventListener('hashchange', updateAccountLink)
+    return () => window.removeEventListener('hashchange', updateAccountLink)
+  }, [])
 
     useEffect(() => {
         const controller = new AbortController()
@@ -126,6 +145,10 @@ function Access() {
                     </button>
                 </>
             )}
+
+      {(accountLink || (!session && !busy)) && (
+        <EnlacesCuenta key={accountLink?.token ?? 'request'} link={accountLink} />
+      )}
 
             {message && (
                 <p className={message.error ? 'notice error' : 'notice'}
