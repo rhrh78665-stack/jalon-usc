@@ -16,6 +16,15 @@ function tokenDigest(token) {
     return createHash('sha256').update(token).digest('hex')
 }
 
+function sessionCookieOptions(req) {
+    return {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: req.secure || process.env.NODE_ENV === 'production',
+        path: '/',
+    }
+}
+
 export function createApp(db, dist) {
     const app = express()
     app.disable('x-powered-by')
@@ -85,11 +94,8 @@ export function createApp(db, dist) {
         })
 
         res.cookie('jalon_session', token, {
-            httpOnly: true,
-            sameSite: 'lax',
-            secure: req.secure || process.env.NODE_ENV === 'production',
+            ...sessionCookieOptions(req),
             maxAge: sessionMaxAge,
-            path: '/',
         }).json({ email: user.email })
     })
 
@@ -110,15 +116,29 @@ export function createApp(db, dist) {
         res.json({ email: user.email })
     })
 
+    app.post('/api/logout', async (req, res) => {
+        requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+
+        const token = sessionToken(req)
+
+        if (token) {
+            await db.query('DELETE FROM sessions WHERE token_hash = $1', [tokenDigest(token)])
+        }
+
+        res.clearCookie('jalon_session', sessionCookieOptions(req)).status(204).end()
+    })
+
     if (dist) app.use(express.static(dist))
 
     app.use((error, _req, res, _next) => {
         if (error instanceof RuleError) {
             return res.status(error.status).json({ message: error.message })
         }
+
         if (error.type === 'entity.parse.failed') {
             return res.status(400).json({ message: 'El JSON enviado es inválido.' })
         }
+
         if (error.type === 'entity.too.large') {
             return res.status(413).json({ message: 'La solicitud supera el tamaño permitido.' })
         }
