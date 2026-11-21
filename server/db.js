@@ -75,6 +75,19 @@ export async function openDatabase(path) {
     );
 
     CREATE INDEX IF NOT EXISTS vehicles_user_id_idx ON vehicles (user_id);
+
+    CREATE TABLE IF NOT EXISTS trips (
+      id text PRIMARY KEY,
+      driver_id text NOT NULL REFERENCES users(id),
+      vehicle_id text NOT NULL REFERENCES vehicles(id),
+      depart_at timestamptz NOT NULL,
+      capacity integer NOT NULL CHECK (capacity > 0),
+      route jsonb NOT NULL,
+      status text NOT NULL DEFAULT 'Programado'
+        CHECK (status IN ('Programado', 'Lleno', 'EnCurso', 'Completado', 'Cancelado'))
+    );
+
+    CREATE INDEX IF NOT EXISTS trips_driver_depart_idx ON trips (driver_id, depart_at);
   `)
     return db
 }

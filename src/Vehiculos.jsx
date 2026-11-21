@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import Viajes from './Viajes.jsx'
 
 export default function Vehiculos() {
     const [vehicles, setVehicles] = useState(null)
@@ -94,6 +95,7 @@ export default function Vehiculos() {
                     </form>
                 </>
             )}
+      {vehicles?.length > 0 && <Viajes vehicles={vehicles} />}
             {message && (
                 <p className={message.error ? 'notice error' : 'notice'}
                     role={message.error ? 'alert' : 'status'}>{message.text}</p>

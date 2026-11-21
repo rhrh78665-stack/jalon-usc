@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 
-async function requireDriver(db, userId) {
+export async function requireDriver(db, userId) {
     const { rows: [permission] } = await db.query(
         `SELECT p.user_id FROM driver_permissions p
      JOIN users u ON u.id = p.user_id
