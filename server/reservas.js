@@ -83,4 +83,55 @@ export function mountReservations(app, db, approvedSession) {
     })
     res.status(201).json(booking)
   })
+
+  app.patch('/api/reservations/:id/decision', async (req, res) => {
+    const { id } = await approvedSession(req)
+    requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    const { decision } = req.body ?? {}
+    requireRule(['confirmar', 'rechazar'].includes(decision), 'Selecciona confirmar o rechazar.')
+
+    const result = await db.transaction(async tx => {
+      const { rows: [reference] } = await tx.query(
+        'SELECT trip_id FROM reservations WHERE id = $1', [req.params.id],
+      )
+      requireRule(reference, 'No se encontró la reserva.', 404)
+      const trip = await cargarViaje(tx, reference.trip_id)
+      requireRule(trip.driverId === id, 'Solo el conductor propietario puede decidir.', 403)
+      const { rows: [booking] } = await tx.query(
+        'SELECT * FROM reservations WHERE id = $1 FOR UPDATE', [req.params.id],
+      )
+      requireRule(booking?.status === 'Pendiente', 'La reserva ya fue decidida o cerrada.', 409)
+      const status = decision === 'confirmar' ? 'Confirmada' : 'Rechazada'
+
+      if (status === 'Confirmada') {
+        verificarApertura(trip)
+        await habilitarPasajero(tx, booking.passenger_id)
+        const current = await confirmadas(tx, trip.id)
+        const quote = cotizar(trip, current, trip.route[booking.board_index], trip.route[booking.alight_index])
+        requireRule(quote.availableSeats > 0, 'No hay cupo en todos los tramos solicitados.', 409)
+        const { rows } = await tx.query(
+          `SELECT 1 FROM reservations r JOIN trips t ON t.id = r.trip_id
+           WHERE r.passenger_id = $1 AND r.status = 'Confirmada' AND t.id <> $2
+             AND (t.itinerary -> r.board_index ->> 'estimatedAt')::timestamptz < $4::timestamptz
+             AND (t.itinerary -> r.alight_index ->> 'estimatedAt')::timestamptz > $3::timestamptz
+           LIMIT 1`,
+          [booking.passenger_id, trip.id, quote.boardAt, quote.alightAt],
+        )
+        requireRule(!rows.length, 'El pasajero tiene otra reserva confirmada en ese horario.', 409)
+        const { rows: [open] } = await tx.query(
+          'SELECT id FROM trips WHERE id = $1 AND depart_at > clock_timestamp()', [trip.id],
+        )
+        requireRule(open, 'La postulación del viaje está cerrada.', 409)
+
+        const after = cotizar(trip, [...current, { ...booking, status }], trip.route[0], trip.route.at(-1))
+        if (after.segments.every(segment => segment.availableSeats === 0)) {
+          await tx.query("UPDATE trips SET status = 'Lleno' WHERE id = $1", [trip.id])
+        }
+      }
+
+      await tx.query('UPDATE reservations SET status = $2 WHERE id = $1', [booking.id, status])
+      return consultarReserva(tx, booking.id)
+    })
+    res.json(result)
+  })
 }

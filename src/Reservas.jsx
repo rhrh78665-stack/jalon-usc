@@ -4,6 +4,7 @@ import { api, horaLocal, nombreParada, pesos } from './Itinerario.jsx'
 export default function Reservas() {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(null)
 
   useEffect(() => {
     let controller
@@ -31,6 +32,23 @@ export default function Reservas() {
     }
   }, [])
 
+  async function decidir(id, decision) {
+    setSaving(id)
+    setError('')
+    try {
+      await api(`/api/reservations/${encodeURIComponent(id)}/decision`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      })
+      window.dispatchEvent(new Event('jalon-trips-update'))
+    } catch (failure) {
+      setError(failure.message)
+    } finally {
+      setSaving(null)
+    }
+  }
+
   return (
     <section aria-labelledby="reservations-heading">
       <h2 id="reservations-heading">Reservas</h2>
@@ -43,6 +61,12 @@ export default function Reservas() {
             <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'} · {booking.status}</p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
+            {booking.canDecide && booking.status === 'Pendiente' && (
+              <div className="actions">
+                <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'confirmar')}>Confirmar</button>
+                <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'rechazar')}>Rechazar</button>
+              </div>
+            )}
           </li>
         ))}
       </ul>

@@ -51,6 +51,8 @@ test('RF-018 a RF-020: solicitudes y decisiones de reserva', async t => {
 
   const solicitar = (trip, user = 'passenger', origin = 'melendez', destination = 'usc') =>
     request(`/api/trips/${trip.id}/reservations`, { user, method: 'POST', body: { origin, destination } })
+  const decidir = (id, decision = 'confirmar', user = 'driver') =>
+    request(`/api/reservations/${id}/decision`, { user, method: 'PATCH', body: { decision } })
   const bandeja = user => request('/api/reservations', { user })
 
   await t.test('CP-F018 guarda el máximo, bloquea duplicados y conserva los cupos pendientes', async () => {
@@ -75,5 +77,37 @@ test('RF-018 a RF-020: solicitudes y decisiones de reserva', async t => {
     await db.exec("UPDATE users SET suspended_until = NULL WHERE id = 'other'")
     await db.query("UPDATE trips SET depart_at = NOW() - interval '1 minute' WHERE id = $1", [trip.id])
     assert.equal((await solicitar(trip, 'other')).status, 409)
+  })
+
+  await t.test('CP-F019 solo confirma un cupo concurrente y permite rechazar después', async () => {
+    const trip = await publish(valid(undefined, { capacity: 1 }))
+    const a = (await solicitar(trip)).data
+    const b = (await solicitar(trip, 'other')).data
+    assert.equal((await decidir(a.id, 'rechazar', 'outsider')).status, 403)
+    const attempts = await Promise.all([decidir(a.id), decidir(b.id)])
+    assert.deepEqual(attempts.map(r => r.status).sort(), [200, 409])
+    const winner = attempts.find(r => r.status === 200).data
+    const loser = winner.id === a.id ? b : a
+    assert.equal(winner.status, 'Confirmada')
+    assert.equal((await decidir(winner.id)).status, 409)
+    assert.equal((await decidir(loser.id, 'rechazar')).data.status, 'Rechazada')
+    const { rows: [status] } = await db.query('SELECT status FROM trips WHERE id = $1', [trip.id])
+    assert.equal(status.status, 'Lleno')
+  })
+
+  await t.test('CP-F019 admite tramos sin cruce y bloquea traslape en viajes distintos', async () => {
+    const date = nextDay()
+    const first = await publish(valid(date, { capacity: 1 }))
+    const second = await publish(valid(date, { capacity: 1 }))
+    const left = (await solicitar(first, 'passenger', 'melendez', 'lido')).data
+    const right = (await solicitar(first, 'other', 'lido', 'usc')).data
+    const overlap = (await solicitar(second, 'passenger')).data
+    assert.equal((await decidir(left.id)).status, 200)
+    assert.equal((await db.query('SELECT status FROM trips WHERE id = $1', [first.id])).rows[0].status, 'Programado')
+    assert.equal((await decidir(right.id)).status, 200)
+    const conflict = await decidir(overlap.id)
+    assert.equal(conflict.status, 409)
+    assert.match(conflict.data.message, /otra reserva.*horario/)
+    assert.equal((await bandeja('passenger')).data.find(item => item.id === overlap.id).status, 'Pendiente')
   })
 })
