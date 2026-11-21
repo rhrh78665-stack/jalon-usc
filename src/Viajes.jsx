@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import CierreViaje from './CierreViaje.jsx'
 import { paradas, precioGalonDemo } from '../shared/paradas.js'
 import Itinerario, { api, horaLocal, fechaFormulario } from './Itinerario.jsx'
 
@@ -141,6 +142,7 @@ export default function Viajes({ vehicles }) {
             <strong>{horaLocal.format(new Date(trip.departAt))} · {trip.status}</strong>
             <Itinerario trip={trip} />
             <p>{trip.capacity} cupos ofrecidos</p>
+            <CierreViaje trip={trip} />
             {trip.cancelReason && <p>Motivo: {trip.cancelReason}</p>}
             {['Programado', 'Lleno'].includes(trip.status) && <>
               <div className="actions">

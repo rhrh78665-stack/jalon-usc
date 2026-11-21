@@ -102,4 +102,22 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     assert.equal((await cancelar(left.id)).status, 200)
     assert.equal(await state(trip), 'Programado')
   })
+
+  await t.test('CP-F023 vence pendientes, requiere asistencia y persiste un cierre idempotente', async () => {
+    const trip = await publish(valid())
+    const booking = await confirmar(trip)
+    const pending = (await solicitar(trip, 'other')).data
+    assert.equal((await start(trip)).status, 409)
+    await started(trip)
+    assert.equal((await bandeja('other')).data.find(r => r.id === pending.id).status, 'Vencida')
+    assert.equal((await cancelar(booking.id)).status, 409)
+    assert.equal((await close(trip, [], 'other')).status, 403)
+    assert.equal((await close(trip, [])).status, 409)
+    assert.equal(await state(trip), 'EnCurso')
+    const marks = [{ id: booking.id, attendance: 'Abordo' }]
+    const closes = await Promise.all([close(trip, marks), close(trip, marks)])
+    assert.ok(closes.every(result => result.status === 200))
+    assert.deepEqual(closes[0].data, closes[1].data)
+    assert.equal(await state(trip), 'Completado')
+  })
 })

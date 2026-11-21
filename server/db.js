@@ -118,6 +118,10 @@ export async function openDatabase(path) {
       PRIMARY KEY (reservation_id, reason)
     );
     CREATE INDEX IF NOT EXISTS booking_warnings_passenger_date ON booking_warnings(passenger_id, created_at);
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS started_at timestamptz;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS liquidation jsonb;
+    ALTER TABLE reservations ADD COLUMN IF NOT EXISTS attendance text CHECK (attendance IN ('Abordo', 'Ausente'));
   `)
     return db
 }
