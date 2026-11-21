@@ -7,12 +7,15 @@ export default function BuscarViajes() {
   const [detail, setDetail] = useState(null)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+  const [notice, setNotice] = useState(null)
   const searchRequest = useRef(null)
   const detailRequest = useRef(null)
   const lastQuery = useRef(null)
 
   async function buscar(query) {
     lastQuery.current = query
+    setNotice(null)
     searchRequest.current?.abort()
     detailRequest.current?.abort()
     const controller = new AbortController()
@@ -58,6 +61,26 @@ export default function BuscarViajes() {
     }
   }
 
+  async function solicitar() {
+    const { origin, destination } = result.query
+    setRequesting(true)
+    setMessage(null)
+    try {
+      await api(`/api/trips/${encodeURIComponent(detail.id)}/reservations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin, destination }),
+      })
+      setDetail(null)
+      setNotice('Solicitud enviada. Quedó pendiente de confirmación.')
+      window.dispatchEvent(new Event('jalon-reservas-update'))
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setRequesting(false)
+    }
+  }
+
   return (
     <section aria-labelledby="search-heading">
       <h2 id="search-heading">Buscar viajes</h2>
@@ -82,6 +105,7 @@ export default function BuscarViajes() {
         <small id="search-time-help">Hacia la USC: llegar hasta 40 minutos antes de tu hora límite. Desde la USC: recoger desde tu hora disponible hasta 40 minutos después.</small>
         <button disabled={busy}>{busy ? 'Buscando…' : 'Buscar viajes'}</button>
       </form>
+      {notice && <p role="status">{notice}</p>}
       {message && <p className="notice error" role="alert">{message}</p>}
       {result && (
         <div aria-live="polite" aria-busy={busy}>
@@ -118,6 +142,7 @@ export default function BuscarViajes() {
               {nombreParada[segment.from]} → {nombreParada[segment.to]}: {segment.distanceKm} km · estimado {pesos.format(segment.estimatedCop)} · máximo {pesos.format(segment.maximumCop)}
             </li>)}
           </ul>
+          <button type="button" disabled={requesting} onClick={solicitar}>Solicitar asiento</button>
           <button type="button" className="secondary" onClick={() => setDetail(null)}>Cerrar detalle</button>
         </section>
       )}

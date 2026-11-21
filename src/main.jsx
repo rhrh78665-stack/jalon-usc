@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
 import Vehiculos from './Vehiculos.jsx'
 import BuscarViajes from './BuscarViajes.jsx'
+import Reservas from './Reservas.jsx'
 import { AvisosViajes } from './Itinerario.jsx'
 import { EnlacesCuenta, Perfil } from './Cuenta.jsx'
 import './styles.css'
@@ -122,7 +123,7 @@ function Access() {
                         {busy ? 'Cerrando…' : 'Cerrar sesión'}
                     </button>
           <Perfil />
-                    {session.mobility ? <Movilidad /> : <><AvisosViajes /><BuscarViajes /><Vehiculos /></>}
+                    {session.mobility ? <Movilidad /> : <><AvisosViajes /><BuscarViajes /><Reservas /><Vehiculos /></>}
                 </>
             ) : (
                 <>

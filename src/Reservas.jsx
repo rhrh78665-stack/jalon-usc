@@ -1,0 +1,51 @@
+import React, { useEffect, useState } from 'react'
+import { api, horaLocal, nombreParada, pesos } from './Itinerario.jsx'
+
+export default function Reservas() {
+  const [items, setItems] = useState([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let controller
+    async function cargar() {
+      controller?.abort()
+      const request = new AbortController()
+      controller = request
+      try {
+        const reservations = await api('/api/reservations', { signal: request.signal })
+        if (!request.signal.aborted) {
+          setItems(reservations)
+          setError('')
+        }
+      } catch (failure) {
+        if (!request.signal.aborted) setError(failure.message)
+      }
+    }
+    cargar()
+    window.addEventListener('jalon-reservas-update', cargar)
+    window.addEventListener('jalon-trips-update', cargar)
+    return () => {
+      controller?.abort()
+      window.removeEventListener('jalon-reservas-update', cargar)
+      window.removeEventListener('jalon-trips-update', cargar)
+    }
+  }, [])
+
+  return (
+    <section aria-labelledby="reservations-heading">
+      <h2 id="reservations-heading">Reservas</h2>
+      {error && <p role="alert">{error}</p>}
+      {!items.length && !error && <p>Aún no hay reservas.</p>}
+      <ul className="trip-list" aria-live="polite">
+        {items.map(booking => (
+          <li key={booking.id}>
+            <strong>{nombreParada[booking.origin]} → {nombreParada[booking.destination]}</strong>
+            <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'} · {booking.status}</p>
+            {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
+            <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

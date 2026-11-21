@@ -93,6 +93,8 @@ export async function openDatabase(path) {
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS pricing jsonb;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS cancel_reason text;
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_until timestamptz;
+
     CREATE TABLE IF NOT EXISTS reservations (
       id text PRIMARY KEY,
       trip_id text NOT NULL REFERENCES trips(id),

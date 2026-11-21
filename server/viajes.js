@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { requireDriver } from './vehiculos.js'
+import { mountReservations } from './reservas.js'
 import {
   horaBogota, horaLocal, validarParadas, crearItinerario, fijarCostos,
   cotizar, diferenciaHorario, fechasSerie,
@@ -59,6 +60,7 @@ function enteroConsulta(value, fallback, max) {
 }
 
 export function mountTrips(app, db, approvedSession) {
+  mountReservations(app, db, approvedSession)
   const listeners = new Map()
 
   // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
