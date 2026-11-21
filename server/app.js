@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword } from './auth.js'
 import { mountMobility } from './movilidad.js'
 import { mountVehicles } from './vehiculos.js'
 import { mountProfile } from './perfil.js'
-import { mountRecovery } from './enlaces-cuenta.js'
+import { mountRecovery, mountVerification } from './enlaces-cuenta.js'
 import { institutionalEmail, requireRule, RuleError } from './rules.js'
 
 const sessionMaxAge = 8 * 60 * 60 * 1000
@@ -135,6 +135,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
     mountVehicles(app, db, req => approvedSession(db, req))
   mountProfile(app, db, req => approvedSession(db, req))
   mountRecovery(app, db, mail)
+  mountVerification(app, db, mail)
 
     if (dist) app.use(express.static(dist))
     app.use((error, _req, res, _next) => {

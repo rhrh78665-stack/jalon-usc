@@ -4,6 +4,7 @@ import { institutionalEmail, requireRule } from './rules.js'
 
 const actions = {
   recover: { minutes: 30, subject: 'Recuperación de acceso a Jalón USC' },
+  verify: { minutes: 60, subject: 'Verificación de correo en Jalón USC' },
 }
 
 const hash = value => createHash('sha256').update(value).digest('hex')
@@ -15,7 +16,10 @@ async function sendLink(db, mail, purpose, email) {
   const { rows: [issued] } = await db.query(
     `INSERT INTO account_links (user_id, purpose, token_hash, expires_at)
      SELECT id, $2, $3, CURRENT_TIMESTAMP + $4::int * interval '1 minute'
-     FROM users WHERE email = $1 AND status = 'approved'
+     FROM users WHERE email = $1 AND (
+       ($2 = 'recover' AND status = 'approved') OR
+       ($2 = 'verify' AND status IN ('pending', 'approved') AND email_verified_at IS NULL)
+     )
      ON CONFLICT (user_id, purpose) DO UPDATE SET
        token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at,
        issued_at = CURRENT_TIMESTAMP
@@ -79,5 +83,23 @@ export function mountRecovery(app, db, mail) {
       await tx.query('DELETE FROM sessions WHERE user_id = $1', [id])
     })
     res.json({ message: 'Contraseña actualizada. Ya puedes iniciar sesión.' })
+  })
+}
+
+export function mountVerification(app, db, mail) {
+  mountRequest(app, db, mail, 'verify')
+  app.post('/api/account/verify/confirm', async (req, res) => {
+    const digest = tokenHash(req)
+    await db.transaction(async tx => {
+      const id = await consume(tx, 'verify', digest)
+      const { rows: [user] } = await tx.query(
+        `UPDATE users SET email_verified_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND email_verified_at IS NULL AND status IN ('pending', 'approved')
+         RETURNING id`,
+        [id],
+      )
+      requireRule(user, 'Enlace inválido, usado o vencido.')
+    })
+    res.json({ message: 'Correo verificado.' })
   })
 }

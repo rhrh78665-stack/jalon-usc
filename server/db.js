@@ -15,6 +15,7 @@ export async function openDatabase(path) {
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS alias text NOT NULL DEFAULT '';
     ALTER TABLE users ADD COLUMN IF NOT EXISTS trip_email_opt_in boolean NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at timestamptz;
 
     CREATE TABLE IF NOT EXISTS account_links (
       user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,

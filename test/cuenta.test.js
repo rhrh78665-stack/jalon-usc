@@ -76,6 +76,17 @@ test('Cuenta RF-007 a RF-009', async t => {
     assert.equal(rows[0].alias, '')
   })
 
+  await t.test('CP-F009 Verificar correo', async () => {
+    const token = await requestLink('verify', 'pendiente@usc.edu.co', 'Verificación de correo en Jalón USC')
+    assert.equal((await request('account/recover/confirm', { body: { token, password: newPassword } })).status, 400)
+    const confirm = () => request('account/verify/confirm', { body: { token } })
+    assert.equal((await confirm()).status, 200)
+    assert.equal((await confirm()).status, 400)
+    const { rows: [user] } = await db.query("SELECT status, email_verified_at FROM users WHERE id = 'b'")
+    assert.equal(user.status, 'pending')
+    assert.ok(user.email_verified_at)
+  })
+
   await t.test('CP-F007 Recuperar acceso', async () => {
     const subject = 'Recuperación de acceso a Jalón USC'
     const expired = await requestLink('recover', email, subject)

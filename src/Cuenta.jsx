@@ -14,7 +14,7 @@ export function EnlacesCuenta({ link }) {
     event.preventDefault()
     const form = event.currentTarget
     const data = new FormData(form)
-    const action = 'recover'
+    const action = confirming ? link.action : data.get('action')
     const body = confirming
       ? { token: link.token, password: data.get('password') }
       : { email: data.get('email') }
@@ -39,17 +39,24 @@ export function EnlacesCuenta({ link }) {
 
   return (
     <section aria-labelledby="account-links">
-      <h2 id="account-links">Recuperar acceso</h2>
+      <h2 id="account-links">Recuperar acceso o verificar correo</h2>
       {!done && (
         <form onSubmit={submit}>
           {confirming ? (
+            link.action === 'recover' && (
               <>
                 <label htmlFor="new-password">Nueva contraseña</label>
                 <input id="new-password" name="password" type="password"
                   autoComplete="new-password" minLength={10} maxLength={128} required />
               </>
+            )
           ) : (
             <>
+              <label htmlFor="account-action">Acción</label>
+              <select id="account-action" name="action">
+                <option value="recover">Recuperar contraseña</option>
+                <option value="verify">Verificar mi correo</option>
+              </select>
               <label htmlFor="link-email">Correo institucional para el enlace</label>
               <input id="link-email" name="email" type="email" autoComplete="email" required />
             </>

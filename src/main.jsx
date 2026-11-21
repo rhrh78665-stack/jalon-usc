@@ -9,7 +9,7 @@ function readAccountLink() {
   const params = new URLSearchParams(window.location.hash.slice(1))
   const action = params.get('action')
   const token = params.get('token')
-  return token && action === 'recover' ? { action, token } : null
+  return token && ['recover', 'verify'].includes(action) ? { action, token } : null
 }
 
 function Access() {
