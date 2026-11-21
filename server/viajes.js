@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { requireDriver } from './vehiculos.js'
-import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar, diferenciaHorario } from './itinerarios.js'
+import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar, diferenciaHorario, fechasSerie } from './itinerarios.js'
 
 const campos = `id, driver_id AS "driverId", vehicle_id AS "vehicleId",
   depart_at AS "departAt", capacity, route, status, itinerary, pricing`
@@ -123,7 +123,16 @@ export function mountTrips(app, db, approvedSession) {
     res.status(201).json(trip)
   })
 
-
+  app.post('/api/trips/series', async (req, res) => {
+    const { id } = await approvedSession(req)
+    const bodies = fechasSerie(jsonBody(req))
+    const trips = await db.transaction(async tx => {
+      const created = []
+      for (const body of bodies) created.push(await crearViaje(tx, id, body))
+      return created
+    })
+    res.status(201).json(trips)
+  })
 
   app.put('/api/trips/:id', async (req, res) => {
     const { id } = await approvedSession(req)

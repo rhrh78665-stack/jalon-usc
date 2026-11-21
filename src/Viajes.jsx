@@ -14,6 +14,9 @@ export default function Viajes({ vehicles }) {
   const [message, setMessage] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
   const [editing, setEditing] = useState(null)
+  const [series, setSeries] = useState(false)
+  const [dates, setDates] = useState([])
+  const [nextDate, setNextDate] = useState('')
   const formRef = useRef(null)
 
   useEffect(() => {
@@ -40,6 +43,9 @@ export default function Viajes({ vehicles }) {
   function resetForm() {
     setDraft(emptyDraft())
     setEditing(null)
+    setSeries(false)
+    setDates([])
+    setNextDate('')
   }
 
   function editTrip(trip) {
@@ -53,6 +59,8 @@ export default function Viajes({ vehicles }) {
       capacity: String(trip.capacity), fuelPrice: String(trip.pricing?.fuelPriceCopPerGallon ?? precioGalonDemo), stops,
     })
     setEditing(trip.id)
+    setSeries(false)
+    setDates([])
     setMessage(null)
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     formRef.current?.querySelector('select')?.focus()
@@ -69,22 +77,26 @@ export default function Viajes({ vehicles }) {
   async function publicar(event) {
     event.preventDefault()
     const selected = draft.stops.map((stop, index) => ({ ...stop, time: index === 0 ? draft.departAt : stop.time })).filter(stop => stop.id)
+    if (series && !dates.length) {
+      setMessage({ error: true, text: 'Añade al menos una fecha para la serie.' })
+      return
+    }
     const body = {
       vehicleId: draft.vehicleId, departAt: draft.departAt, capacity: Number(draft.capacity),
       fuelPriceCopPerGallon: Number(draft.fuelPrice), route: selected.map(stop => stop.id),
-      stopTimes: selected.map(stop => stop.time),
+      stopTimes: selected.map(stop => stop.time), ...(series ? { dates } : {}),
     }
     setSaving(true)
     setMessage(null)
     try {
-      const url = editing ? `/api/trips/${encodeURIComponent(editing)}` : '/api/trips'
+      const url = editing ? `/api/trips/${encodeURIComponent(editing)}` : series ? '/api/trips/series' : '/api/trips'
       const result = await api(url, {
         method: editing ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const saved = Array.isArray(result) ? result : [result]
       setTrips(current => [...(current ?? []).filter(trip => !saved.some(item => item.id === trip.id)), ...saved]
         .sort((a, b) => a.departAt.localeCompare(b.departAt) || a.id.localeCompare(b.id)))
-      setMessage({ text: editing ? 'Viaje actualizado.' : 'Viaje publicado.' })
+      setMessage({ text: editing ? 'Viaje actualizado.' : series ? `${saved.length} viajes publicados.` : 'Viaje publicado.' })
       resetForm()
       window.dispatchEvent(new Event('jalon-trips-update'))
     } catch (error) {
@@ -153,8 +165,27 @@ export default function Viajes({ vehicles }) {
                 onChange={event => stopField(index, 'time', event.target.value)} />
             </fieldset>
           })}
-
-          <button disabled={saving}>{saving ? 'Guardando…' : editing ? 'Guardar cambios' : 'Publicar viaje'}</button>
+          {!editing && <fieldset disabled={saving}>
+            <legend>Repetir en otras fechas</legend>
+            <label htmlFor="trip-series">Tipo de publicación</label>
+            <select id="trip-series" value={series ? 'series' : 'single'} onChange={event => setSeries(event.target.value === 'series')}>
+              <option value="single">Un solo viaje</option>
+              <option value="series">Una serie de viajes</option>
+            </select>
+            {series && <>
+              <p>Se publicará un viaje por cada fecha de la lista, con las mismas horas y duración. Si una fecha no es válida, no se guarda ninguno.</p>
+              <label htmlFor="series-date">Fecha para añadir</label>
+              <input id="series-date" type="date" value={nextDate}
+                onInput={event => setNextDate(event.target.value)} onChange={event => setNextDate(event.target.value)} />
+              <button type="button" className="secondary" disabled={!nextDate || dates.includes(nextDate) || dates.length >= 30}
+                onClick={() => { setDates(current => [...current, nextDate].sort()); setNextDate('') }}>Añadir fecha</button>
+              <ul className="date-list">{dates.map(date => <li key={date}>
+                {date} <button type="button" className="secondary" aria-label={`Quitar fecha ${date}`}
+                  onClick={() => setDates(current => current.filter(value => value !== date))}>Quitar</button>
+              </li>)}</ul>
+            </>}
+          </fieldset>}
+          <button disabled={saving}>{saving ? 'Guardando…' : editing ? 'Guardar cambios' : series ? 'Publicar serie' : 'Publicar viaje'}</button>
           {editing && <button type="button" className="secondary" disabled={saving} onClick={resetForm}>Salir de edición</button>}
         </form>
       </>}

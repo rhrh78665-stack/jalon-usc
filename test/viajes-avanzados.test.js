@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-015: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-016: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -178,5 +178,22 @@ test('RF-011 a RF-015: itinerarios, búsqueda y gestión de viajes', async t => 
       const { rows: [saved] } = await db.query('SELECT capacity FROM trips WHERE id = $1', [trip.id])
       assert.equal(saved.capacity, 2)
     }
+  })
+
+  await t.test('CP-F016 crea viajes independientes y revierte una serie con fecha pasada', async () => {
+    const body = valid()
+    const dates = [nextDay(), nextDay()]
+    const created = await request('/api/trips/series', { method: 'POST', body: { ...body, dates } })
+    assert.equal(created.status, 201, JSON.stringify(created.data))
+    assert.equal(created.data.length, 2)
+    assert.notEqual(created.data[0].id, created.data[1].id)
+    assert.deepEqual(created.data.map(trip => horaLocal(trip.departAt).slice(0, 10)), dates)
+    const { rows: [before] } = await db.query('SELECT COUNT(*)::int AS count FROM trips')
+    const failed = await request('/api/trips/series', { method: 'POST', body: { ...body, dates: [nextDay(), '2000-01-01'] } })
+    assert.equal(failed.status, 400)
+    const { rows: [after] } = await db.query('SELECT COUNT(*)::int AS count FROM trips')
+    assert.equal(after.count, before.count)
+    assert.equal((await request('/api/trips/series', { method: 'POST', body: { ...body, dates: ['2035-02-30'] } })).status, 400)
+    assert.equal((await request('/api/trips/series', { user: 'passenger', method: 'POST', body: { ...body, dates } })).status, 403)
   })
 })

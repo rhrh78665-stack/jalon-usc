@@ -108,3 +108,19 @@ export function diferenciaHorario(trip, quote, target) {
   const delta = towardsUsc ? target - actual : actual - target
   return delta >= 0 && delta <= 40 * minute ? delta : null
 }
+
+export function fechasSerie(body) {
+  requireRule(Array.isArray(body.dates) && body.dates.length > 0 && body.dates.length <= 30 &&
+    new Set(body.dates).size === body.dates.length, 'Selecciona entre 1 y 30 fechas distintas.')
+  const base = horaBogota(body.departAt)
+  crearItinerario(body.route, body.stopTimes, base)
+  return body.dates.map(date => {
+    requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Una fecha de la serie no es válida.')
+    const departAt = date + 'T' + body.departAt.slice(11)
+    const shift = new Date(horaBogota(departAt)).getTime() - new Date(base).getTime()
+    return {
+      ...body, departAt,
+      stopTimes: body.stopTimes.map(value => horaLocal(new Date(new Date(horaBogota(value)).getTime() + shift))),
+    }
+  })
+}

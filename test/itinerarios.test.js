@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { crearItinerario, fijarCostos, cotizar, horaBogota } from '../server/itinerarios.js'
+import { crearItinerario, fijarCostos, cotizar, horaBogota, fechasSerie } from '../server/itinerarios.js'
 
 test('CP-F011 rechaza distancias ausentes, inválidas y tramos inactivos', () => {
   const route = ['melendez', 'usc']
@@ -34,4 +34,17 @@ test('CP-F014 cotización usa costos fijos y ocupación por tramo, con máximo e
   assert.throws(() => cotizar(trip, [], 'usc', 'melendez'), /subida/)
   assert.throws(() => fijarCostos(fixed.itinerary, 0, 15000), /rendimiento/)
   assert.throws(() => fijarCostos(fixed.itinerary, 30, -1), /precio/)
+})
+
+test('CP-F016 conserva duración nocturna y rechaza fechas inexistentes y duplicadas', () => {
+  const body = {
+    departAt: '2035-01-01T23:50', route: ['melendez', 'usc'],
+    stopTimes: ['2035-01-01T23:50', '2035-01-02T00:20'], dates: ['2035-02-01', '2035-02-02'],
+  }
+  const series = fechasSerie(body)
+  assert.deepEqual(series.map(trip => trip.stopTimes), [
+    ['2035-02-01T23:50', '2035-02-02T00:20'], ['2035-02-02T23:50', '2035-02-03T00:20'],
+  ])
+  assert.throws(() => fechasSerie({ ...body, dates: ['2035-02-30'] }))
+  assert.throws(() => fechasSerie({ ...body, dates: ['2035-02-01', '2035-02-01'] }))
 })
