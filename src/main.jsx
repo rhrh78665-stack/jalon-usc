@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
+import Vehiculos from './Vehiculos.jsx'
 import './styles.css'
 
 function Access() {
@@ -51,7 +52,6 @@ function Access() {
             }
 
             form.reset()
-
             if (login) {
                 setSession(result)
             } else {
@@ -93,52 +93,31 @@ function Access() {
     return (
         <main>
             <p className="brand">Jalón USC</p>
-
             {session ? (
                 <>
                     <h1>Sesión iniciada</h1>
                     <p>{session.email}</p>
-
                     <button type="button" disabled={busy} onClick={signOut}>
                         {busy ? 'Cerrando…' : 'Cerrar sesión'}
                     </button>
-
-                    {session.mobility && <Movilidad />}
+                    {session.mobility ? <Movilidad /> : <Vehiculos />}
                 </>
             ) : (
                 <>
                     <h1>{login ? 'Iniciar sesión' : 'Crea tu cuenta'}</h1>
-
                     <form onSubmit={submit} aria-busy={busy} key={login ? 'login' : 'register'}>
                         <label htmlFor="email">Correo institucional</label>
-                        <input
-                            id="email"
-                            name="email"
-                            type="email"
-                            autoComplete="email"
-                            placeholder="nombre@usc.edu.co"
-                            maxLength={254}
-                            required
-                        />
-
+                        <input id="email" name="email" type="email" autoComplete="email"
+                            placeholder="nombre@usc.edu.co" maxLength={254} required />
                         <label htmlFor="password">Contraseña</label>
-                        <input
-                            id="password"
-                            name="password"
-                            type="password"
+                        <input id="password" name="password" type="password"
                             autoComplete={login ? 'current-password' : 'new-password'}
-                            aria-describedby="password-help"
-                            minLength={10}
-                            maxLength={128}
-                            required
-                        />
-
+                            aria-describedby="password-help" minLength={10} maxLength={128} required />
                         <small id="password-help">Entre 10 y 128 caracteres.</small>
                         <button disabled={busy}>
                             {busy ? 'Procesando…' : login ? 'Entrar' : 'Crear cuenta'}
                         </button>
                     </form>
-
                     <button type="button" disabled={busy} onClick={() => {
                         setLogin(current => !current)
                         setMessage(null)
@@ -149,12 +128,8 @@ function Access() {
             )}
 
             {message && (
-                <p
-                    className={message.error ? 'notice error' : 'notice'}
-                    role={message.error ? 'alert' : 'status'}
-                >
-                    {message.text}
-                </p>
+                <p className={message.error ? 'notice error' : 'notice'}
+                    role={message.error ? 'alert' : 'status'}>{message.text}</p>
             )}
         </main>
     )

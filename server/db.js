@@ -4,7 +4,6 @@ import { dirname } from 'node:path'
 
 export async function openDatabase(path) {
     if (path) await mkdir(dirname(path), { recursive: true })
-
     const db = new PGlite(path)
     await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -51,7 +50,18 @@ export async function openDatabase(path) {
       license_expires_on date NOT NULL,
       enabled_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
-  `)
 
+    CREATE TABLE IF NOT EXISTS vehicles (
+      id text PRIMARY KEY,
+      user_id text NOT NULL REFERENCES users(id),
+      plate text NOT NULL UNIQUE CHECK (plate ~ '^[A-Z]{3}[0-9]{3}$'),
+      seats integer NOT NULL CHECK (seats > 0),
+      efficiency double precision NOT NULL CHECK (
+        efficiency > 0 AND efficiency < 'Infinity'::double precision
+      )
+    );
+
+    CREATE INDEX IF NOT EXISTS vehicles_user_id_idx ON vehicles (user_id);
+  `)
     return db
 }

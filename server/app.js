@@ -2,6 +2,7 @@ import express from 'express'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword, verifyPassword } from './auth.js'
 import { mountMobility } from './movilidad.js'
+import { mountVehicles } from './vehiculos.js'
 import { institutionalEmail, requireRule, RuleError } from './rules.js'
 
 const sessionMaxAge = 8 * 60 * 60 * 1000
@@ -50,12 +51,10 @@ function sessionView(user) {
 export function createApp(db, dist) {
     const app = express()
     app.disable('x-powered-by')
-
     app.use('/api', (_req, res, next) => {
         res.set('Cache-Control', 'no-store')
         next()
     })
-
     app.use('/api', express.json({ limit: '8kb' }))
 
     app.post('/api/register', async (req, res) => {
@@ -64,10 +63,8 @@ export function createApp(db, dist) {
             req.body && typeof req.body === 'object' && !Array.isArray(req.body),
             'Completa los datos de registro.',
         )
-
         const email = institutionalEmail(req.body.email)
         const password = await hashPassword(req.body.password)
-
         const { rows } = await db.query(
             `INSERT INTO users (id, email, password, status)
        VALUES ($1, $2, $3, 'pending')
@@ -75,7 +72,6 @@ export function createApp(db, dist) {
        RETURNING status`,
             [randomUUID(), email, password],
         )
-
         requireRule(rows.length === 1, 'Ese correo ya tiene una cuenta.', 409)
         res.status(201).json({ status: rows[0].status })
     })
@@ -86,30 +82,25 @@ export function createApp(db, dist) {
             req.body && typeof req.body === 'object' && !Array.isArray(req.body),
             'Completa los datos de acceso.',
         )
-
         const email = institutionalEmail(req.body.email)
         const { rows: [user] } = await db.query(
             'SELECT id, email, password, status, mobility FROM users WHERE email = $1',
             [email],
         )
-
         const matches = await verifyPassword(req.body.password, user?.password ?? emptyHash)
         const credentialsError = 'Credenciales inválidas o cuenta sin aprobar.'
         requireRule(user?.status === 'approved' && matches, credentialsError, 401)
 
         const token = randomBytes(32).toString('hex')
         const previous = sessionToken(req)
-
-        await db.transaction(async tx => {
+        await db.transaction(async (tx) => {
             const { rows } = await tx.query(
                 `INSERT INTO sessions (token_hash, user_id, expires_at)
          SELECT $1, id, $2 FROM users WHERE id = $3 AND status = 'approved'
          RETURNING user_id`,
                 [tokenDigest(token), new Date(Date.now() + sessionMaxAge).toISOString(), user.id],
             )
-
             requireRule(rows.length === 1, credentialsError, 401)
-
             if (previous) {
                 await tx.query('DELETE FROM sessions WHERE token_hash = $1', [tokenDigest(previous)])
             }
@@ -129,7 +120,6 @@ export function createApp(db, dist) {
         requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
 
         const token = sessionToken(req)
-
         if (token) {
             await db.query('DELETE FROM sessions WHERE token_hash = $1', [tokenDigest(token)])
         }
@@ -138,22 +128,19 @@ export function createApp(db, dist) {
     })
 
     mountMobility(app, db, req => approvedSession(db, req))
+    mountVehicles(app, db, req => approvedSession(db, req))
 
     if (dist) app.use(express.static(dist))
-
     app.use((error, _req, res, _next) => {
         if (error instanceof RuleError) {
             return res.status(error.status).json({ message: error.message })
         }
-
         if (error.type === 'entity.parse.failed') {
             return res.status(400).json({ message: 'El JSON enviado es inválido.' })
         }
-
         if (error.type === 'entity.too.large') {
             return res.status(413).json({ message: 'La solicitud supera el tamaño permitido.' })
         }
-
         console.error('Error de solicitud', error.code ?? error.name)
         res.status(500).json({ message: 'No se pudo procesar la solicitud.' })
     })
