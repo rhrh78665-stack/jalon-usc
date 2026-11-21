@@ -15,6 +15,48 @@ function readAccountLink() {
   return token && ['recover', 'verify'].includes(action) ? { action, token } : null
 }
 
+function Panel({ session, busy, signOut }) {
+  const [active, setActive] = useState(session.mobility ? 'movilidad' : 'viajes')
+  const sections = session.mobility
+    ? [['movilidad', 'Movilidad', '▦'], ['perfil', 'Perfil', '◉']]
+    : [['viajes', 'Buscar viajes', '↗'], ['reservas', 'Reservas', '▤'],
+       ['publicados', 'Mis viajes', '↔'], ['vehiculos', 'Vehículos', '▱'], ['perfil', 'Perfil', '◉']]
+  return (
+    <div className="workspace">
+      <aside className="sidebar">
+        <div className="workspace-brand"><span aria-hidden="true">J</span><strong>Jalón USC</strong></div>
+        <nav aria-label="Secciones de Jalón USC">
+          {sections.map(([id, label, icon]) => (
+            <button key={id} type="button" aria-current={active === id ? 'page' : undefined}
+              aria-controls={id === 'publicados' || id === 'vehiculos' ? 'panel-conductor' : 'panel-' + id}
+              onClick={() => setActive(id)}>
+              <span aria-hidden="true">{icon}</span>{label}
+            </button>
+          ))}
+        </nav>
+        <div className="account">
+          <span>{session.email}</span>
+          <button type="button" disabled={busy} onClick={signOut}>{busy ? 'Cerrando…' : 'Cerrar sesión'}</button>
+        </div>
+      </aside>
+      <div className="workspace-content">
+        {!session.mobility && <AvisosViajes />}
+        {session.mobility && <div id="panel-movilidad" className="workspace-panel" hidden={active !== 'movilidad'}><Movilidad /></div>}
+        {!session.mobility && (
+          <>
+            <div id="panel-viajes" className="workspace-panel" hidden={active !== 'viajes'}><BuscarViajes /></div>
+            <div id="panel-reservas" className="workspace-panel" hidden={active !== 'reservas'}><Reservas /></div>
+            <div id="panel-conductor" className="workspace-panel" hidden={!['publicados', 'vehiculos'].includes(active)}>
+              <Vehiculos view={active} />
+            </div>
+          </>
+        )}
+        <div id="panel-perfil" className="workspace-panel" hidden={active !== 'perfil'}><Perfil /></div>
+      </div>
+    </div>
+  )
+}
+
 function Access() {
   const [accountLink, setAccountLink] = useState(readAccountLink)
     const [login, setLogin] = useState(false)
@@ -113,20 +155,12 @@ function Access() {
     }
 
     return (
-        <main>
-            <p className="brand">Jalón USC</p>
+        <main className={session ? 'app-shell' : 'auth-shell'}>
             {session ? (
-                <>
-                    <h1>Sesión iniciada</h1>
-                    <p>{session.email}</p>
-                    <button type="button" disabled={busy} onClick={signOut}>
-                        {busy ? 'Cerrando…' : 'Cerrar sesión'}
-                    </button>
-          <Perfil />
-                    {session.mobility ? <Movilidad /> : <><AvisosViajes /><BuscarViajes /><Reservas /><Vehiculos /></>}
-                </>
+                <Panel session={session} busy={busy} signOut={signOut} />
             ) : (
                 <>
+                    <p className="brand">Jalón USC</p>
                     <h1>{login ? 'Iniciar sesión' : 'Crea tu cuenta'}</h1>
                     <form onSubmit={submit} aria-busy={busy} key={login ? 'login' : 'register'}>
                         <label htmlFor="email">Correo institucional</label>

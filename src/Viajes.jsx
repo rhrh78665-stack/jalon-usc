@@ -172,7 +172,6 @@ export default function Viajes({ vehicles }) {
           </li>)}
         </ul>
         <h3>{editing ? 'Editar viaje' : 'Publicar viaje'}</h3>
-        <p className="demo-note">Catálogo de demostración con distancias ficticias.</p>
         {editing && <p>Los cambios solo se guardan si el viaje no tiene reservas pendientes ni confirmadas.</p>}
         <form ref={formRef} onSubmit={publicar} aria-busy={saving}>
           <fieldset disabled={saving}>
@@ -191,7 +190,7 @@ export default function Viajes({ vehicles }) {
               <p>Precio del galón: {pesos.format(editing ? Number(draft.fuelPrice) : tarifa.fuelPriceCopPerGallon)}</p>
             ) : (
               <>
-                <label htmlFor="trip-fuel">Precio de prueba por galón (COP)</label>
+                <label htmlFor="trip-fuel">Precio por galón (COP)</label>
                 <input id="trip-fuel" type="number" min="1" step="1" value={draft.fuelPrice} onChange={event => field('fuelPrice', event.target.value)} required />
               </>
             )}

@@ -50,7 +50,13 @@ export async function seedDemo(db, now = Date.now()) {
     const filled = await trip('demo-cancel', tomorrow + 'T07:00', ['melendez', 'lido', 'usc'], 1, 'Lleno')
     const ready = await trip('demo-close', horaLocal(new Date(now - 2 * minute)), ['unicentro', 'usc'], 2)
     const delayed = await trip('demo-expire', tomorrow + 'T09:00', ['melendez', 'usc'], 2)
-    await trip('demo-search', tomorrow + 'T11:00', ['usc', 'lido'], 2)
+    const nextHour = horaLocal(new Date(now + 75 * minute))
+    const today = horaLocal(new Date(now)).slice(0, 10)
+    if (nextHour.slice(0, 10) === today) {
+      await trip('demo-search-today', nextHour, ['melendez', 'usc'], 3)
+    }
+    await trip('demo-search', tomorrow + 'T11:00', ['melendez', 'usc'], 3)
+    await trip('demo-return', tomorrow + 'T17:00', ['usc', 'lido'], 3)
 
     for (const [id, tripId, passenger, itinerary, destination, status, age] of [
       ['demo-b-cancel', 'demo-cancel', 'demo-passenger', filled, 2, 'Confirmada', 0],

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import Viajes from './Viajes.jsx'
 
-export default function Vehiculos() {
+export default function Vehiculos({ view }) {
     const [vehicles, setVehicles] = useState(null)
     const [saving, setSaving] = useState(false)
     const [message, setMessage] = useState({ text: 'Cargando vehículos…' })
@@ -66,7 +66,8 @@ export default function Vehiculos() {
     }
 
     return (
-        <section aria-labelledby="vehicle-heading">
+      <>
+        <section hidden={view !== 'vehiculos'} aria-labelledby="vehicle-heading">
             <h2 id="vehicle-heading">Mis vehículos</h2>
             {vehicles && (
                 <>
@@ -95,11 +96,17 @@ export default function Vehiculos() {
                     </form>
                 </>
             )}
-      {vehicles?.length > 0 && <Viajes vehicles={vehicles} />}
+
             {message && (
                 <p className={message.error ? 'notice error' : 'notice'}
                     role={message.error ? 'alert' : 'status'}>{message.text}</p>
             )}
         </section>
+        <div hidden={view !== 'publicados'}>
+          {vehicles?.length > 0
+            ? <Viajes vehicles={vehicles} />
+            : <section><h2>Mis viajes</h2><p>{message?.text ?? 'Registra un vehículo para publicar un viaje.'}</p></section>}
+        </div>
+      </>
     )
 }

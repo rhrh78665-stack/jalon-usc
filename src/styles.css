@@ -112,6 +112,98 @@ legend { font-weight: 700; }
 .actions button { width: auto; flex: 1; }
 .secondary { background: #e7f4eb; color: #145e47; border: 1px solid #829e8d; }
 .danger { background: #842a22; }
-.demo-note { color: #664b0c; background: #fff5d6; border-radius: .5rem; padding: .7rem; font-size: .9rem; }
 .date-list { display: flex; flex-wrap: wrap; gap: .4rem; padding-left: 1.2rem; }
 .date-list li { margin-right: 1rem; }
+
+:root {
+    background: #f2f5f4;
+    color: #172f2a;
+}
+
+#root { width: 100%; }
+.auth-shell { width: min(100%, 28rem); margin: auto; }
+.app-shell {
+    max-width: 79rem;
+    margin: auto;
+    padding: 0;
+    background: #f6f8f7;
+    border-color: #d9e3df;
+    border-radius: 1.25rem;
+}
+
+.workspace { display: grid; grid-template-columns: 15rem minmax(0, 1fr); min-height: min(47rem, 85dvh); }
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem 1rem;
+    color: #ecf8f1;
+    background: #133a32;
+    border-radius: 1.2rem 0 0 1.2rem;
+}
+.workspace-brand { display: flex; align-items: center; gap: .65rem; padding: 0 .35rem; font-size: 1.25rem; }
+.workspace-brand span {
+    display: grid;
+    place-items: center;
+    flex: 0 0 2.15rem;
+    aspect-ratio: 1;
+    border-radius: .65rem;
+    color: #133a32;
+    background: #bdeccf;
+    font-weight: 800;
+}
+.sidebar nav { display: grid; gap: .35rem; }
+.sidebar button {
+    margin: 0;
+    text-align: left;
+    background: transparent;
+    color: inherit;
+}
+.sidebar button:hover { background: #245247; }
+.sidebar button[aria-current] { background: #e2f5e9; color: #153b32; }
+.sidebar button:focus-visible { outline-color: #bdeccf; }
+.sidebar nav button span { display: inline-block; width: 1.65rem; font-size: 1.05rem; }
+.account { margin-top: auto; border-top: 1px solid #527269; padding: 1rem .35rem 0; }
+.account span { overflow-wrap: anywhere; color: #d5e9de; font-size: .84rem; }
+.account button { margin-top: .45rem; padding-inline: .3rem; }
+.workspace-content { min-width: 0; padding: clamp(1rem, 3.5vw, 2.75rem); }
+.workspace-content > .notice { margin: 0 0 1rem; }
+.workspace-panel > section,
+.workspace-panel > div:not([hidden]) > section {
+    padding: clamp(1rem, 3vw, 2rem);
+    background: #fff;
+    border: 1px solid #dce7e2;
+    border-radius: 1rem;
+    box-shadow: 0 6px 22px #153b3209;
+}
+.workspace-panel h2 { margin: 0 0 1.1rem; font-size: clamp(1.45rem, 3vw, 2.15rem); letter-spacing: -.025em; }
+.workspace-panel h3 { margin-top: 1.5rem; }
+.workspace-panel label { display: block; margin-bottom: .3rem; font-size: .92rem; }
+.workspace-panel :is(input, select, textarea) { min-width: 0; border-color: #a7beb4; background: #fbfdfc; color: inherit; }
+.workspace-panel input[type="checkbox"] { width: auto !important; }
+.workspace-panel .trip-list > li, .trip-detail { background: #fbfdfc; border-color: #dbe7e1; border-radius: .8rem; }
+.workspace-panel .trip-list > li > button, .trip-detail > button, .search-form > button { width: auto; }
+.search-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem 1rem; }
+.search-form > small { grid-column: 1 / -1; }
+.search-form > button { justify-self: start; padding-inline: 1.35rem; }
+.search-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .85rem; }
+.search-results.trip-list > li { margin: 0; border-left: 4px solid #388166; }
+.seat-count { width: fit-content; border-radius: 2rem; padding: .22rem .63rem; background: #e5f4eb; color: #245b42; font-weight: 650; font-size: .86rem; }
+.empty-results { margin-top: 1.5rem; padding: 1.25rem; background: #f3f7f5; border: 1px solid #dce7e2; border-radius: .8rem; }
+.empty-results p { margin: .35rem 0; }
+
+@media (max-width: 740px) {
+    body { padding: .6rem; place-items: start center; }
+    .auth-shell { margin-top: 2rem; }
+    .workspace { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+    .sidebar { border-radius: 1.2rem 1.2rem 0 0; gap: .65rem; padding: .8rem; }
+    .sidebar nav { display: flex; flex-wrap: wrap; }
+    .sidebar nav button { width: auto; padding: .45rem .55rem; font-size: .85rem; }
+    .sidebar nav button span { width: 1.1rem; }
+    .account { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding-top: .35rem; }
+    .account button { width: auto; margin-top: 0; font-size: .83rem; }
+}
+
+@media (max-width: 450px) {
+    .search-form { grid-template-columns: minmax(0, 1fr); gap: .45rem; }
+}

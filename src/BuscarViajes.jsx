@@ -2,7 +2,12 @@ import React, { useEffect, useRef, useState } from 'react'
 import { paradas } from '../shared/paradas.js'
 import Itinerario, { api, nombreParada, horaLocal, pesos, fechaFormulario } from './Itinerario.jsx'
 
+function fechaViajes(days = 0) {
+  return fechaFormulario(new Date(Date.now() + days * 86400000)).slice(0, 10)
+}
+
 export default function BuscarViajes() {
+  const [filters, setFilters] = useState(() => ({ origin: 'melendez', destination: 'usc', date: fechaViajes(), time: '', page: '1', pageSize: '5' }))
   const [result, setResult] = useState(null)
   const [detail, setDetail] = useState(null)
   const [message, setMessage] = useState(null)
@@ -37,6 +42,7 @@ export default function BuscarViajes() {
   }
 
   useEffect(() => {
+    buscar(lastQuery.current ?? filters)
     const refresh = () => { if (lastQuery.current) buscar(lastQuery.current) }
     window.addEventListener('jalon-trips-update', refresh)
     return () => {
@@ -81,41 +87,61 @@ export default function BuscarViajes() {
     }
   }
 
+  function cambiarFiltro(event) {
+    const { name, value } = event.target
+    setFilters(current => ({ ...current, [name]: value, page: '1' }))
+  }
+
+  function buscarSinHora(date) {
+    const next = { ...result.query, date, time: '', page: '1' }
+    setFilters(next)
+    buscar(next)
+  }
+
   return (
     <section aria-labelledby="search-heading">
       <h2 id="search-heading">Buscar viajes</h2>
-      <p className="demo-note">Demostración: las distancias y los parámetros de combustible son datos de prueba.</p>
-      <form onSubmit={event => {
+      <form className="search-form" onSubmit={event => {
         event.preventDefault()
-        buscar({ ...Object.fromEntries(new FormData(event.currentTarget)), page: '1', pageSize: '5' })
+        buscar(filters)
       }} aria-busy={busy}>
-        <label htmlFor="search-origin">Parada de subida</label>
-        <select id="search-origin" name="origin" defaultValue="" required>
+        <div><label htmlFor="search-origin">Parada de subida</label>
+        <select id="search-origin" name="origin" value={filters.origin} onChange={cambiarFiltro} required>
           <option value="">Selecciona una parada</option>
           {paradas.map(stop => <option key={stop.id} value={stop.id}>{stop.nombre}</option>)}
-        </select>
-        <label htmlFor="search-destination">Parada de bajada</label>
-        <select id="search-destination" name="destination" defaultValue="usc" required>
+        </select></div>
+        <div><label htmlFor="search-destination">Parada de bajada</label>
+        <select id="search-destination" name="destination" value={filters.destination} onChange={cambiarFiltro} required>
           {paradas.map(stop => <option key={stop.id} value={stop.id}>{stop.nombre}</option>)}
-        </select>
-        <label htmlFor="search-date">Fecha (hora de Cali)</label>
-        <input id="search-date" type="date" name="date" defaultValue={fechaFormulario(new Date()).slice(0, 10)} required />
-        <label htmlFor="search-time">Hora de llegada o disponibilidad (opcional)</label>
-        <input id="search-time" type="time" name="time" aria-describedby="search-time-help" />
-        <small id="search-time-help">Hacia la USC: llegar hasta 40 minutos antes de tu hora límite. Desde la USC: recoger desde tu hora disponible hasta 40 minutos después.</small>
+        </select></div>
+        <div><label htmlFor="search-date">Fecha (hora de Cali)</label>
+        <input id="search-date" type="date" name="date" value={filters.date} onChange={cambiarFiltro} required /></div>
+        <div><label htmlFor="search-time">Hora de referencia (opcional)</label>
+        <input id="search-time" type="time" name="time" value={filters.time} onChange={cambiarFiltro} aria-describedby="search-time-help" /></div>
+        <small id="search-time-help">Hacia la USC, filtramos por llegada hasta 40 min antes. Desde la USC, por recogida hasta 40 min después.</small>
         <button disabled={busy}>{busy ? 'Buscando…' : 'Buscar viajes'}</button>
       </form>
       {notice && <p role="status">{notice}</p>}
       {message && <p className="notice error" role="alert">{message}</p>}
       {result && (
         <div aria-live="polite" aria-busy={busy}>
-          <p>{result.total ? `${result.total} viajes disponibles para tu recorrido.` : 'No hay viajes compatibles con esta búsqueda.'}</p>
-          <ul className="trip-list" aria-label="Resultados de viajes">
+          {!result.total && !busy && (
+            <div className="empty-results">
+              <strong>No hay viajes compatibles</strong>
+              <p>Cambia la fecha o amplía la búsqueda.</p>
+              <div className="actions">
+                {result.query.time && <button type="button" className="secondary" onClick={() => buscarSinHora(result.query.date)}>Buscar sin hora</button>}
+                {result.query.date !== fechaViajes(1) && <button type="button" className="secondary" onClick={() => buscarSinHora(fechaViajes(1))}>Ver viajes de mañana</button>}
+              </div>
+            </div>
+          )}
+          {result.total > 0 && <p>{result.total === 1 ? '1 viaje disponible' : `${result.total} viajes disponibles`}</p>}
+          <ul className="trip-list search-results" aria-label="Resultados de viajes">
             {result.items.map(trip => (
               <li key={trip.id}>
                 <strong>{nombreParada[result.query.origin]} → {nombreParada[result.query.destination]}</strong>
                 <p>Subida: {horaLocal.format(new Date(trip.boardAt))}<br />Bajada: {horaLocal.format(new Date(trip.alightAt))}</p>
-                <p>{trip.availableSeats} cupos en todo tu recorrido</p>
+                <p className="seat-count">{trip.availableSeats} {trip.availableSeats === 1 ? 'cupo disponible' : 'cupos disponibles'}</p>
                 <button type="button" disabled={busy} onClick={() => consultar(trip.id)}>Ver detalle y aporte</button>
               </li>
             ))}
@@ -139,7 +165,7 @@ export default function BuscarViajes() {
           <p>El estimado considera la ocupación actual. El máximo se calcula con el conductor y un pasajero por tramo.</p>
           <ul>
             {detail.segments.map(segment => <li key={segment.from}>
-              {nombreParada[segment.from]} → {nombreParada[segment.to]}: {segment.distanceKm} km · estimado {pesos.format(segment.estimatedCop)} · máximo {pesos.format(segment.maximumCop)}
+              {nombreParada[segment.from]} → {nombreParada[segment.to]}: estimado {pesos.format(segment.estimatedCop)} · máximo {pesos.format(segment.maximumCop)}
             </li>)}
           </ul>
           <button type="button" disabled={requesting} onClick={solicitar}>Solicitar asiento</button>

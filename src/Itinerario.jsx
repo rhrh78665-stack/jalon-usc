@@ -27,7 +27,7 @@ export default function Itinerario({ trip }) {
           <li key={stop.stopId}>
             <strong>{nombreParada[stop.stopId]}</strong> · {horaLocal.format(new Date(stop.estimatedAt))}
             {stop.distanceToNextKm !== null && (
-              <small> · {stop.distanceToNextKm} km · costo del tramo {pesos.format(stop.costToNextCop)}</small>
+              <small>Costo del tramo {pesos.format(stop.costToNextCop)}</small>
             )}
           </li>
         ))}
