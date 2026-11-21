@@ -1,6 +1,7 @@
 import express from 'express'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword, verifyPassword } from './auth.js'
+import { mountMobility } from './movilidad.js'
 import { institutionalEmail, requireRule, RuleError } from './rules.js'
 
 const sessionMaxAge = 8 * 60 * 60 * 1000
@@ -23,6 +24,27 @@ function sessionCookieOptions(req) {
         secure: req.secure || process.env.NODE_ENV === 'production',
         path: '/',
     }
+}
+
+async function approvedSession(db, req) {
+    const token = sessionToken(req)
+    requireRule(token, 'Sesión no activa.', 401)
+
+    const { rows: [user] } = await db.query(
+        `SELECT users.id, users.email, users.mobility FROM sessions
+     JOIN users ON users.id = sessions.user_id
+     WHERE sessions.token_hash = $1
+       AND sessions.expires_at > CURRENT_TIMESTAMP
+       AND users.status = 'approved'`,
+        [tokenDigest(token)],
+    )
+
+    requireRule(user, 'Sesión no activa.', 401)
+    return user
+}
+
+function sessionView(user) {
+    return user.mobility ? { email: user.email, mobility: true } : { email: user.email }
 }
 
 export function createApp(db, dist) {
@@ -67,7 +89,7 @@ export function createApp(db, dist) {
 
         const email = institutionalEmail(req.body.email)
         const { rows: [user] } = await db.query(
-            'SELECT id, email, password, status FROM users WHERE email = $1',
+            'SELECT id, email, password, status, mobility FROM users WHERE email = $1',
             [email],
         )
 
@@ -78,7 +100,7 @@ export function createApp(db, dist) {
         const token = randomBytes(32).toString('hex')
         const previous = sessionToken(req)
 
-        await db.transaction(async (tx) => {
+        await db.transaction(async tx => {
             const { rows } = await tx.query(
                 `INSERT INTO sessions (token_hash, user_id, expires_at)
          SELECT $1, id, $2 FROM users WHERE id = $3 AND status = 'approved'
@@ -96,24 +118,11 @@ export function createApp(db, dist) {
         res.cookie('jalon_session', token, {
             ...sessionCookieOptions(req),
             maxAge: sessionMaxAge,
-        }).json({ email: user.email })
+        }).json(sessionView(user))
     })
 
     app.get('/api/session', async (req, res) => {
-        const token = sessionToken(req)
-        requireRule(token, 'Sesión no activa.', 401)
-
-        const { rows: [user] } = await db.query(
-            `SELECT users.email FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = $1
-         AND sessions.expires_at > CURRENT_TIMESTAMP
-         AND users.status = 'approved'`,
-            [tokenDigest(token)],
-        )
-
-        requireRule(user, 'Sesión no activa.', 401)
-        res.json({ email: user.email })
+        res.json(sessionView(await approvedSession(db, req)))
     })
 
     app.post('/api/logout', async (req, res) => {
@@ -127,6 +136,8 @@ export function createApp(db, dist) {
 
         res.clearCookie('jalon_session', sessionCookieOptions(req)).status(204).end()
     })
+
+    mountMobility(app, db, req => approvedSession(db, req))
 
     if (dist) app.use(express.static(dist))
 

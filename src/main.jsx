@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
+import Movilidad from './Movilidad.jsx'
 import './styles.css'
 
 function Access() {
@@ -42,7 +43,6 @@ function Access() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(fields),
             })
-
             const result = await response.json()
 
             if (!response.ok) {
@@ -102,6 +102,8 @@ function Access() {
                     <button type="button" disabled={busy} onClick={signOut}>
                         {busy ? 'Cerrando…' : 'Cerrar sesión'}
                     </button>
+
+                    {session.mobility && <Movilidad />}
                 </>
             ) : (
                 <>
