@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
 import Vehiculos from './Vehiculos.jsx'
-import { EnlacesCuenta } from './Cuenta.jsx'
+import { EnlacesCuenta, Perfil } from './Cuenta.jsx'
 import './styles.css'
 
 function readAccountLink() {
@@ -119,6 +119,7 @@ function Access() {
                     <button type="button" disabled={busy} onClick={signOut}>
                         {busy ? 'Cerrando…' : 'Cerrar sesión'}
                     </button>
+          <Perfil />
                     {session.mobility ? <Movilidad /> : <Vehiculos />}
                 </>
             ) : (

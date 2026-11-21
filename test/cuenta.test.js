@@ -64,6 +64,18 @@ test('Cuenta RF-007 a RF-009', async t => {
     return params.get('token')
   }
 
+  await t.test('CP-F008 Gestionar perfil', async () => {
+    const body = { alias: 'Lina', tripEmailOptIn: true }
+    assert.equal((await request('profile', { method: 'PUT', body })).status, 401)
+    const forbidden = await request('profile', { cookie, method: 'PUT', body: { ...body, id: 'b' } })
+    assert.equal(forbidden.status, 400)
+    const save = await request('profile', { cookie, method: 'PUT', body })
+    assert.equal(save.status, 200)
+    assert.deepEqual(await (await request('profile', { cookie })).json(), { email, ...body })
+    const { rows } = await db.query("SELECT alias FROM users WHERE id = 'b'")
+    assert.equal(rows[0].alias, '')
+  })
+
   await t.test('CP-F007 Recuperar acceso', async () => {
     const subject = 'Recuperación de acceso a Jalón USC'
     const expired = await requestLink('recover', email, subject)

@@ -63,3 +63,70 @@ export function EnlacesCuenta({ link }) {
     </section>
   )
 }
+
+export function Perfil() {
+  const [profile, setProfile] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function load() {
+      try {
+        const response = await fetch('/api/profile', { signal: controller.signal })
+        if (!response.ok) throw new Error()
+        setProfile(await response.json())
+      } catch {
+        if (!controller.signal.aborted) {
+          setMessage({ error: true, text: 'No se pudo cargar el perfil.' })
+        }
+      }
+    }
+
+    load()
+    return () => controller.abort()
+  }, [])
+
+  async function save(event) {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    setBusy(true)
+    try {
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alias: data.get('alias'),
+          tripEmailOptIn: data.has('tripEmailOptIn'),
+        }),
+      })
+      const result = await response.json()
+      if (response.ok) setProfile(result)
+      setMessage({ error: !response.ok, text: response.ok ? 'Perfil guardado.' : result.message })
+    } catch {
+      setMessage({ error: true, text: 'No se pudo guardar el perfil.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section aria-labelledby="profile-heading">
+      <h2 id="profile-heading">Mi perfil</h2>
+      {profile && (
+        <form onSubmit={save} key={JSON.stringify(profile)}>
+          <label htmlFor="profile-alias">Alias visible</label>
+          <input id="profile-alias" name="alias" defaultValue={profile.alias}
+            minLength={2} maxLength={40} required />
+          <label>
+            <input name="tripEmailOptIn" type="checkbox" defaultChecked={profile.tripEmailOptIn}
+              style={{ width: 'auto' }} /> Recibir avisos de viajes por correo
+          </label>
+          <button disabled={busy}>Guardar perfil</button>
+        </form>
+      )}
+      {message && <p role={message.error ? 'alert' : 'status'}>{message.text}</p>}
+    </section>
+  )
+}
