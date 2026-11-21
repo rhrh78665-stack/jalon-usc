@@ -81,10 +81,16 @@ export function mountReservations(app, db, approvedSession, informar) {
                AND t.status IN ('Programado', 'Lleno') AND t.depart_at > clock_timestamp()) AS "canCancel",
               CASE WHEN t.status = 'Completado' AND r.status = 'Confirmada'
                    THEN (t.liquidation -> 'aportes' ->> r.id)::bigint END AS "aporteFinalCop",
-              c.amount_cop AS "compensacionCop", c.confirmed_at AS "compensacionConfirmadaEn"
+              c.amount_cop AS "compensacionCop", c.confirmed_at AS "compensacionConfirmadaEn",
+              (r.status = 'Confirmada' AND r.attendance = 'Abordo' AND t.status = 'Completado'
+               AND clock_timestamp() <= t.completed_at + interval '7 days' AND q.author_id IS NULL) AS "canRate",
+              q.stars AS "misEstrellas", q.review AS "miResena",
+              COALESCE(NULLIF(counterpart.alias, ''), CASE WHEN t.driver_id = $1 THEN 'Pasajero' ELSE 'Conductor' END) AS contraparte
 
        FROM reservations r JOIN trips t ON t.id = r.trip_id
        LEFT JOIN compensations c ON c.reservation_id = r.id
+       JOIN users counterpart ON counterpart.id = CASE WHEN t.driver_id = $1 THEN r.passenger_id ELSE t.driver_id END
+       LEFT JOIN ratings q ON q.trip_id = t.id AND q.author_id = $1 AND q.target_id = counterpart.id
        WHERE r.passenger_id = $1 OR t.driver_id = $1
        ORDER BY t.depart_at, r.id`, [id],
     )

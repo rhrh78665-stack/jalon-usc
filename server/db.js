@@ -136,6 +136,16 @@ export async function openDatabase(path) {
       configured_by text NOT NULL REFERENCES users(id),
       created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS ratings (
+      trip_id text NOT NULL REFERENCES trips(id),
+      author_id text NOT NULL REFERENCES users(id),
+      target_id text NOT NULL REFERENCES users(id),
+      stars integer NOT NULL CHECK (stars BETWEEN 1 AND 5),
+      review text NOT NULL CHECK (char_length(review) BETWEEN 1 AND 300),
+      created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (author_id <> target_id),
+      PRIMARY KEY (trip_id, author_id, target_id)
+    );
   `)
     return db
 }

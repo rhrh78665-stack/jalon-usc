@@ -4,6 +4,7 @@ import { tarifaVigente, mountTariffs } from './tarifas.js'
 import { tramos } from '../shared/paradas.js'
 import { requireDriver } from './vehiculos.js'
 import { mountReservations } from './reservas.js'
+import { mountRatings } from './calificaciones.js'
 import { mountCompensations } from './compensaciones.js'
 import { mountTripClosing } from './cierre-viajes.js'
 import {
@@ -89,6 +90,7 @@ export function mountTrips(app, db, approvedSession) {
   mountTariffs(app, db, approvedSession)
   mountTripClosing(app, db, approvedSession, informar)
   mountCompensations(app, db, approvedSession, informar)
+  mountRatings(app, db, approvedSession)
   mountReservations(app, db, approvedSession, (participants, booking) =>
     informar(participants, 'reservation-changed', { id: booking.id, tripId: booking.tripId, status: booking.status }))
 

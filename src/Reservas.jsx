@@ -85,6 +85,26 @@ export default function Reservas() {
                 <button disabled={saving !== null}>Registrar pago externo</button>
               </form>
             )}
+            {booking.canRate && (
+              <form onSubmit={event => {
+                event.preventDefault()
+                const data = new FormData(event.currentTarget)
+                actualizar(booking.id, 'rating', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stars: Number(data.get('stars')), review: data.get('review') }),
+                })
+              }}>
+                <label>Estrellas para {booking.contraparte}
+                  <select name="stars" defaultValue="" required>
+                    <option value="">Selecciona</option>
+                    {[1, 2, 3, 4, 5].map(star => <option key={star}>{star}</option>)}
+                  </select>
+                </label>
+                <label>Reseña <textarea name="review" minLength={1} maxLength={300} required /></label>
+                <button disabled={saving !== null}>Publicar reseña</button>
+              </form>
+            )}
+            {booking.misEstrellas != null && <p>Tu calificación: {booking.misEstrellas}/5 · {booking.miResena}</p>}
             {booking.canCancel && (
               <button type="button" disabled={saving !== null} onClick={() => actualizar(booking.id, 'cancel', { method: 'POST' })}>
                 Cancelar mi reserva

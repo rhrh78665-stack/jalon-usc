@@ -187,6 +187,9 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     const trip = await publish(valid())
     const booking = await confirmar(trip)
     await started(trip)
+    const marks = [{ id: booking.id, attendance: 'Abordo' }]
+    assert.equal((await post(`/api/trips/${trip.id}/finish`, { asistencia: marks, totalCop: 1 })).status, 400)
+    assert.equal(await state(trip), 'EnCurso')
     await db.query('UPDATE reservations SET maximum_cop = 1 WHERE id = $1', [booking.id])
     assert.equal((await close(trip, [{ id: booking.id, attendance: 'Abordo' }])).status, 409)
     const { rows: [persisted] } = await db.query('SELECT status, liquidation FROM trips WHERE id = $1', [trip.id])
@@ -231,5 +234,23 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     const edited = await request(`/api/trips/${newTrip.id}`, { method: 'PUT', body: valid() })
     assert.equal(edited.status, 200)
     assert.equal(edited.data.itinerary[0].costToNextCop, 2300)
+  })
+
+  await t.test('CP-F030 registra ambas direcciones y rechaza duplicados, ausencias y plazo vencido', async () => {
+    assert.equal((await rate(member.id, 'outsider')).status, 403)
+    assert.equal((await rate(absent.id, 'other')).status, 409)
+    assert.equal((await rate(member.id, 'passenger', 'x'.repeat(301))).status, 400)
+    assert.equal((await rate(member.id, 'driver')).status, 201)
+    assert.equal((await rate(member.id, 'passenger')).status, 201)
+    assert.equal((await rate(member.id, 'driver')).status, 409)
+    assert.equal((await bandeja('passenger')).data.find(r => r.id === member.id).misEstrellas, 5)
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM ratings WHERE trip_id = $1', [completed.id])).rows[0].n, 2)
+
+    const expired = await publish(valid())
+    const another = await confirmar(expired, 'other')
+    await started(expired)
+    assert.equal((await close(expired, [{ id: another.id, attendance: 'Abordo' }])).status, 200)
+    await db.query("UPDATE trips SET completed_at = NOW() - interval '8 days' WHERE id = $1", [expired.id])
+    assert.equal((await rate(another.id, 'other')).status, 409)
   })
 })
