@@ -122,6 +122,7 @@ export async function openDatabase(path) {
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS completed_at timestamptz;
     ALTER TABLE trips ADD COLUMN IF NOT EXISTS liquidation jsonb;
     ALTER TABLE reservations ADD COLUMN IF NOT EXISTS attendance text CHECK (attendance IN ('Abordo', 'Ausente'));
+    ALTER TABLE reservations ADD COLUMN IF NOT EXISTS requested_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP;
   `)
     return db
 }

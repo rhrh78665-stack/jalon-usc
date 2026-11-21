@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { fijarCostos, horaLocal } from '../server/itinerarios.js'
+import { expirarPendientes } from '../server/reservas.js'
 
 test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
   const db = await openDatabase()
@@ -119,5 +120,24 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     assert.ok(closes.every(result => result.status === 200))
     assert.deepEqual(closes[0].data, closes[1].data)
     assert.equal(await state(trip), 'Completado')
+  })
+
+  await t.test('CP-F024 usa el primer vencimiento y respeta la desactivación', async () => {
+    const trip = await publish(valid())
+    const early = (await solicitar(trip)).data
+    const onDeparture = await publish(valid())
+    const late = (await solicitar(onDeparture, 'other')).data
+    await db.query("UPDATE reservations SET requested_at = NOW() - interval '1 hour' WHERE id = $1", [early.id])
+    await db.query("UPDATE trips SET depart_at = NOW() - interval '1 minute' WHERE id = $1", [onDeparture.id])
+    const messages = []
+    const notify = async (ids, booking) => messages.push({ ids, booking })
+    await expirarPendientes(db, 0, notify)
+    assert.equal(messages.length, 0)
+    await expirarPendientes(db, 30, notify)
+    assert.deepEqual(messages.map(m => m.booking.id).filter(id => [early.id, late.id].includes(id)).sort(), [early.id, late.id].sort())
+    assert.ok(messages.every(m => m.booking.status === 'Vencida' && m.ids.includes('driver')))
+    const count = messages.length
+    await expirarPendientes(db, 30, notify)
+    assert.equal(messages.length, count)
   })
 })

@@ -52,9 +52,29 @@ async function consultarReserva(tx, id) {
   return booking
 }
 
+export async function expirarPendientes(db, minutes, informar) {
+  if (!minutes) return
+  const { rows } = await db.query(
+    `UPDATE reservations r SET status = 'Vencida' FROM trips t
+     WHERE r.trip_id = t.id AND r.status = 'Pendiente' AND t.status IN ('Programado', 'Lleno')
+       AND LEAST(t.depart_at, r.requested_at + $1::int * interval '1 minute') <= clock_timestamp()
+     RETURNING r.id, r.trip_id AS "tripId", r.status, r.passenger_id, t.driver_id`, [minutes],
+  )
+  await Promise.all(rows.map(({ passenger_id, driver_id, ...booking }) =>
+    informar([passenger_id, driver_id], booking)))
+}
+
 export function mountReservations(app, db, approvedSession, informar) {
+  const minutes = Number(process.env.JALON_RESPONSE_MINUTES ?? 0)
+  if (!Number.isInteger(minutes) || minutes < 0 || minutes > 10080) {
+    throw new Error('JALON_RESPONSE_MINUTES debe estar entre 0 y 10080.')
+  }
+  const expirar = () => expirarPendientes(db, minutes, informar)
+  app.locals.expirarReservas = expirar
+
   app.get('/api/reservations', async (req, res) => {
     const { id } = await approvedSession(req)
+    await expirar()
     const { rows } = await db.query(
       `SELECT ${campos}, (t.driver_id = $1) AS "canDecide",
               (r.passenger_id = $1 AND r.status IN ('Pendiente', 'Confirmada')
@@ -69,6 +89,7 @@ export function mountReservations(app, db, approvedSession, informar) {
   app.post('/api/trips/:id/reservations', async (req, res) => {
     const { id } = await approvedSession(req)
     requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    await expirar()
     const { origin, destination } = req.body ?? {}
     validarParadas(origin, destination)
 
@@ -96,6 +117,7 @@ export function mountReservations(app, db, approvedSession, informar) {
 
   app.post('/api/reservations/:id/cancel', async (req, res) => {
     const { id } = await approvedSession(req)
+    await expirar()
     const result = await db.transaction(async tx => {
       const { rows: [reference] } = await tx.query(
         'SELECT trip_id FROM reservations WHERE id = $1 AND passenger_id = $2', [req.params.id, id],
@@ -134,6 +156,7 @@ export function mountReservations(app, db, approvedSession, informar) {
   app.patch('/api/reservations/:id/decision', async (req, res) => {
     const { id } = await approvedSession(req)
     requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    await expirar()
     const { decision } = req.body ?? {}
     requireRule(['confirmar', 'rechazar'].includes(decision), 'Selecciona confirmar o rechazar.')
 
@@ -166,7 +189,9 @@ export function mountReservations(app, db, approvedSession, informar) {
         )
         requireRule(!rows.length, 'El pasajero tiene otra reserva confirmada en ese horario.', 409)
         const { rows: [open] } = await tx.query(
-          'SELECT id FROM trips WHERE id = $1 AND depart_at > clock_timestamp()', [trip.id],
+          `SELECT id FROM trips WHERE id = $1 AND depart_at > clock_timestamp()
+           AND ($2::int = 0 OR $3::timestamptz + $2::int * interval '1 minute' > clock_timestamp())`,
+          [trip.id, minutes, booking.requested_at],
         )
         requireRule(open, 'La postulación del viaje está cerrada.', 409)
 
