@@ -140,4 +140,11 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     await expirarPendientes(db, 30, notify)
     assert.equal(messages.length, count)
   })
+
+  await t.test('CP-F025 calcula $21.000 con 38 km, $15.000 por galón y $2.000 de peaje', () => {
+    const result = fijarCostos([{ distanceToNextKm: 38, tollToNextCop: 2000 }], 30, 15000)
+    assert.equal(result.itinerary[0].costToNextCop, 21000)
+    assert.equal(result.pricing.totalCostCop, 21000)
+  })
+
 })

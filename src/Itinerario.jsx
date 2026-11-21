@@ -19,15 +19,21 @@ export default function Itinerario({ trip }) {
   if (!trip.itinerary?.length) {
     return <p>{trip.route.map(id => nombreParada[id] ?? id).join(' → ')}. Edita el viaje para completar sus horarios.</p>
   }
+  const total = trip.itinerary.reduce((sum, stop) => sum + (stop.costToNextCop ?? 0), 0)
   return (
-    <ol className="itinerary" aria-label="Itinerario del viaje">
-      {trip.itinerary.map(stop => (
-        <li key={stop.stopId}>
-          <strong>{nombreParada[stop.stopId]}</strong> · {horaLocal.format(new Date(stop.estimatedAt))}
-          {stop.distanceToNextKm !== null && <small> · {stop.distanceToNextKm} km hasta la siguiente parada</small>}
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol className="itinerary" aria-label="Itinerario del viaje">
+        {trip.itinerary.map(stop => (
+          <li key={stop.stopId}>
+            <strong>{nombreParada[stop.stopId]}</strong> · {horaLocal.format(new Date(stop.estimatedAt))}
+            {stop.distanceToNextKm !== null && (
+              <small> · {stop.distanceToNextKm} km · costo del tramo {pesos.format(stop.costToNextCop)}</small>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p>Costo de operación del viaje: {pesos.format(total)}</p>
+    </>
   )
 }
 

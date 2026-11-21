@@ -64,12 +64,16 @@ export function fijarCostos(itinerary, efficiency, fuelPriceCopPerGallon) {
     'Indica un precio del galón entero y mayor que cero.')
   const result = itinerary.map(stop => {
     if (stop.distanceToNextKm === null) return stop
+    requireRule(Number.isFinite(stop.distanceToNextKm) && stop.distanceToNextKm > 0 &&
+      Number.isSafeInteger(stop.tollToNextCop) && stop.tollToNextCop >= 0,
+    'La distancia y el peaje del tramo deben ser válidos.')
     const cost = Math.round(stop.distanceToNextKm / efficiency * fuelPriceCopPerGallon + stop.tollToNextCop)
     requireRule(Number.isSafeInteger(cost) && cost >= 0 && cost <= 2147483647,
       'El costo del tramo supera el límite permitido.')
     return { ...stop, costToNextCop: cost }
   })
-  return { itinerary: result, pricing: { currency: 'COP', efficiency, fuelPriceCopPerGallon } }
+  const totalCostCop = result.reduce((sum, stop) => sum + (stop.costToNextCop ?? 0), 0)
+  return { itinerary: result, pricing: { currency: 'COP', efficiency, fuelPriceCopPerGallon, totalCostCop } }
 }
 
 export function cotizar(trip, reservations, origin, destination) {
