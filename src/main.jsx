@@ -15,27 +15,36 @@ function readAccountLink() {
   return token && ['recover', 'verify'].includes(action) ? { action, token } : null
 }
 
+function Marca() {
+  return (
+    <div className="workspace-brand">
+      <img src="/jalon-logo.webp" width="48" height="48" alt="" />
+      <strong>Jalón USC</strong>
+    </div>
+  )
+}
+
 function Panel({ session, busy, signOut }) {
   const [active, setActive] = useState(session.mobility ? 'movilidad' : 'viajes')
   const sections = session.mobility
-    ? [['movilidad', 'Movilidad', '▦'], ['perfil', 'Perfil', '◉']]
-    : [['viajes', 'Buscar viajes', '↗'], ['reservas', 'Reservas', '▤'],
-       ['publicados', 'Mis viajes', '↔'], ['vehiculos', 'Vehículos', '▱'], ['perfil', 'Perfil', '◉']]
+    ? [['movilidad', 'Movilidad'], ['perfil', 'Perfil']]
+    : [['viajes', 'Buscar viajes'], ['reservas', 'Reservas'],
+       ['publicados', 'Mis viajes'], ['vehiculos', 'Vehículos'], ['perfil', 'Perfil']]
   return (
     <div className="workspace">
       <header className="workspace-header">
-        <div className="workspace-brand"><span aria-hidden="true">J</span><strong>Jalón USC</strong></div>
+        <Marca />
         <div className="account">
           <span>{session.email}</span>
           <button type="button" disabled={busy} onClick={signOut}>{busy ? 'Cerrando…' : 'Cerrar sesión'}</button>
         </div>
       </header>
         <nav className="workspace-tabs" aria-label="Secciones de Jalón USC">
-          {sections.map(([id, label, icon]) => (
+          {sections.map(([id, label]) => (
             <button key={id} type="button" aria-current={active === id ? 'page' : undefined}
               aria-controls={id === 'publicados' || id === 'vehiculos' ? 'panel-conductor' : 'panel-' + id}
               onClick={() => setActive(id)}>
-              <span aria-hidden="true">{icon}</span>{label}
+              {label}
             </button>
           ))}
         </nav>
@@ -160,7 +169,7 @@ function Access() {
                 <Panel session={session} busy={busy} signOut={signOut} />
             ) : (
                 <>
-                    <p className="brand">Jalón USC</p>
+                    <Marca />
                     <h1>{login ? 'Iniciar sesión' : 'Crea tu cuenta'}</h1>
                     <form onSubmit={submit} aria-busy={busy} key={login ? 'login' : 'register'}>
                         <label htmlFor="email">Correo institucional</label>

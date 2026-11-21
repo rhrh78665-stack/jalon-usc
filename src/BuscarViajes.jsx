@@ -100,7 +100,10 @@ export default function BuscarViajes() {
 
   return (
     <section aria-labelledby="search-heading">
-      <h2 id="search-heading">Buscar viajes</h2>
+      <header className="search-heading">
+        <h2 id="search-heading">Buscar viajes</h2>
+        <p>Encuentra un trayecto compartido hacia o desde el campus.</p>
+      </header>
       <form className="search-form" onSubmit={event => {
         event.preventDefault()
         buscar(filters)
@@ -139,10 +142,14 @@ export default function BuscarViajes() {
           <ul className="trip-list search-results" aria-label="Resultados de viajes">
             {result.items.map(trip => (
               <li key={trip.id}>
-                <strong>{nombreParada[result.query.origin]} → {nombreParada[result.query.destination]}</strong>
-                <p>Subida: {horaLocal.format(new Date(trip.boardAt))}<br />Bajada: {horaLocal.format(new Date(trip.alightAt))}</p>
-                <p className="seat-count">{trip.availableSeats} {trip.availableSeats === 1 ? 'cupo disponible' : 'cupos disponibles'}</p>
-                <button type="button" disabled={busy} onClick={() => consultar(trip.id)}>Ver detalle y aporte</button>
+                <div className="result-route">
+                  <div><strong>{nombreParada[result.query.origin]}</strong><time dateTime={trip.boardAt}>{horaLocal.format(new Date(trip.boardAt))}</time></div>
+                  <div><strong>{nombreParada[result.query.destination]}</strong><time dateTime={trip.alightAt}>{horaLocal.format(new Date(trip.alightAt))}</time></div>
+                </div>
+                <div className="result-footer">
+                  <p className="seat-count">{trip.availableSeats} {trip.availableSeats === 1 ? 'cupo disponible' : 'cupos disponibles'}</p>
+                  <button type="button" className="secondary" disabled={busy} onClick={() => consultar(trip.id)}>Ver detalle y aporte</button>
+                </div>
               </li>
             ))}
           </ul>

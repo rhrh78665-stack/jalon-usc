@@ -60,7 +60,7 @@ export default function Reservas() {
         {items.map(booking => (
           <li key={booking.id}>
             <strong>{nombreParada[booking.origin]} → {nombreParada[booking.destination]}</strong>
-            <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'} · {booking.status}</p>
+            <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'}{' '}<span className="booking-status" data-status={booking.status}>{booking.status}</span></p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
             {booking.aporteFinalCop != null && <p>Aporte definitivo: {pesos.format(booking.aporteFinalCop)}</p>}
