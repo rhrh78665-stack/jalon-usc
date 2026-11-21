@@ -1,3 +1,4 @@
+import Tarifas from './Tarifas.jsx'
 import React, { useEffect, useState } from 'react'
 
 const base = '/api/movilidad'
@@ -75,6 +76,7 @@ export default function Movilidad() {
 
     return (
         <section aria-label="Movilidad">
+            <Tarifas />
             <h2>Solicitudes de vinculación</h2>
 
             {requests === null && !message && <p>Cargando solicitudes…</p>}

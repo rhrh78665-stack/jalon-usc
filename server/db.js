@@ -129,6 +129,13 @@ export async function openDatabase(path) {
       recorded_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
       confirmed_at timestamptz
     );
+    CREATE TABLE IF NOT EXISTS trip_tariffs (
+      version integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      fuel_price integer NOT NULL CHECK (fuel_price > 0),
+      tolls jsonb NOT NULL,
+      configured_by text NOT NULL REFERENCES users(id),
+      created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `)
     return db
 }

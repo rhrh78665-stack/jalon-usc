@@ -7,6 +7,7 @@ import { openDatabase } from '../server/db.js'
 import { fijarCostos, horaLocal } from '../server/itinerarios.js'
 import { calcularLiquidacion, verificarLiquidacion } from '../server/liquidacion.js'
 import { expirarPendientes } from '../server/reservas.js'
+import { tramos } from '../shared/paradas.js'
 
 test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
   const db = await openDatabase()
@@ -210,5 +211,25 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     const first = await post(path, undefined, 'passenger')
     assert.equal(first.status, 200)
     assert.deepEqual((await post(path, undefined, 'passenger')).data, first.data)
+  })
+
+  await t.test('CP-F029 versiona precios y peajes sin aplicar la tarifa nueva a viajes anteriores', async () => {
+    const prior = await publish(valid())
+    await db.exec("UPDATE users SET mobility = true WHERE id = 'outsider'")
+    const tolls = Object.fromEntries(tramos.map(({ from, to }) => [from + ':' + to, 300]))
+    const configure = (fuelPriceCopPerGallon, user) => post('/api/movilidad/tarifas/nueva', { fuelPriceCopPerGallon, tolls }, user)
+    assert.equal((await configure(20000, 'other')).status, 403)
+    assert.equal((await configure(20000, 'outsider')).status, 201)
+    const newTrip = await publish(valid())
+    assert.equal(newTrip.pricing.tariff.version, 1)
+    assert.equal(newTrip.itinerary[0].costToNextCop, 2300)
+    assert.equal((await configure(25000, 'outsider')).status, 201)
+    const later = await publish(valid())
+    assert.equal(later.pricing.tariff.version, 2)
+    assert.equal(later.itinerary[0].costToNextCop, 2800)
+    assert.equal((await request('/api/trips/mine')).data.find(trip => trip.id === prior.id).pricing.fuelPriceCopPerGallon, 15000)
+    const edited = await request(`/api/trips/${newTrip.id}`, { method: 'PUT', body: valid() })
+    assert.equal(edited.status, 200)
+    assert.equal(edited.data.itinerary[0].costToNextCop, 2300)
   })
 })

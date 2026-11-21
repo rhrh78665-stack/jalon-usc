@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
+import { tarifaVigente, mountTariffs } from './tarifas.js'
+import { tramos } from '../shared/paradas.js'
 import { requireDriver } from './vehiculos.js'
 import { mountReservations } from './reservas.js'
 import { mountCompensations } from './compensaciones.js'
@@ -19,19 +21,27 @@ function jsonBody(req) {
   return req.body
 }
 
-async function preparar(tx, driverId, body) {
+async function preparar(tx, driverId, body, previousPricing) {
   const { vehicleId, departAt, capacity, route, stopTimes, fuelPriceCopPerGallon } = body
   requireRule(typeof vehicleId === 'string' && vehicleId.length > 0, 'Selecciona tu vehículo.')
   requireRule(Number.isInteger(capacity) && capacity > 0, 'Indica una cantidad entera de cupos mayor que cero.')
   const departure = horaBogota(departAt)
-  const ordered = crearItinerario(route, stopTimes, departure)
+  const vigente = await tarifaVigente(tx)
+  const tarifa = previousPricing?.tariff ?? (previousPricing ? null : vigente)
+  const catalog = tarifa ? tramos.map(segment => ({
+    ...segment, tollCop: tarifa.tolls[segment.from + ':' + segment.to],
+  })) : tramos
+  const ordered = crearItinerario(route, stopTimes, departure, catalog)
   await requireDriver(tx, driverId)
   const { rows: [vehicle] } = await tx.query(
     'SELECT seats, efficiency FROM vehicles WHERE id = $1 AND user_id = $2 FOR SHARE', [vehicleId, driverId],
   )
   requireRule(vehicle, 'Selecciona un vehículo propio.')
   requireRule(capacity <= vehicle.seats, 'Los cupos superan la capacidad del vehículo.')
-  return { vehicleId, departure, capacity, route, ...fijarCostos(ordered, vehicle.efficiency, fuelPriceCopPerGallon) }
+  const fuel = tarifa?.fuelPriceCopPerGallon ??
+    (vigente && previousPricing ? previousPricing.fuelPriceCopPerGallon : fuelPriceCopPerGallon)
+  const { itinerary, pricing } = fijarCostos(ordered, vehicle.efficiency, fuel)
+  return { vehicleId, departure, capacity, route, itinerary, pricing: { ...pricing, ...(tarifa && { tariff: tarifa }) } }
 }
 
 async function crearViaje(tx, driverId, body) {
@@ -76,6 +86,7 @@ export function mountTrips(app, db, approvedSession) {
     })))
   }
 
+  mountTariffs(app, db, approvedSession)
   mountTripClosing(app, db, approvedSession, informar)
   mountCompensations(app, db, approvedSession, informar)
   mountReservations(app, db, approvedSession, (participants, booking) =>
@@ -197,7 +208,7 @@ export function mountTrips(app, db, approvedSession) {
         "SELECT id FROM reservations WHERE trip_id = $1 AND status IN ('Pendiente', 'Confirmada') LIMIT 1", [current.id],
       )
       requireRule(rows.length === 0, 'No puedes editar un viaje con reservas pendientes o confirmadas.', 409)
-      const trip = await preparar(tx, id, body)
+      const trip = await preparar(tx, id, body, current.pricing)
       const { rows: [updated] } = await tx.query(
         `UPDATE trips SET vehicle_id = $2, depart_at = $3::timestamptz, capacity = $4,
          route = $5::jsonb, itinerary = $6::jsonb, pricing = $7::jsonb, status = 'Programado'

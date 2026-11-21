@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import CierreViaje from './CierreViaje.jsx'
 import { paradas, precioGalonDemo } from '../shared/paradas.js'
-import Itinerario, { api, horaLocal, fechaFormulario } from './Itinerario.jsx'
+import Itinerario, { api, horaLocal, fechaFormulario, pesos } from './Itinerario.jsx'
 
 const labels = ['Origen', 'Parada intermedia 1', 'Parada intermedia 2', 'Destino']
 const emptyDraft = () => ({
@@ -11,6 +11,7 @@ const emptyDraft = () => ({
 
 export default function Viajes({ vehicles }) {
   const [trips, setTrips] = useState(null)
+  const [tarifa, setTarifa] = useState(null)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
@@ -21,6 +22,15 @@ export default function Viajes({ vehicles }) {
   const [dates, setDates] = useState([])
   const [nextDate, setNextDate] = useState('')
   const formRef = useRef(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    api('/api/trips/tarifa', { signal: controller.signal }).then(setTarifa)
+      .catch(error => {
+        if (!controller.signal.aborted) setMessage({ error: true, text: error.message })
+      })
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     let controller
@@ -162,7 +172,7 @@ export default function Viajes({ vehicles }) {
           </li>)}
         </ul>
         <h3>{editing ? 'Editar viaje' : 'Publicar viaje'}</h3>
-        <p className="demo-note">Catálogo de demostración: distancias ficticias y precio de combustible de prueba.</p>
+        <p className="demo-note">Catálogo de demostración con distancias ficticias.</p>
         {editing && <p>Los cambios solo se guardan si el viaje no tiene reservas pendientes ni confirmadas.</p>}
         <form ref={formRef} onSubmit={publicar} aria-busy={saving}>
           <fieldset disabled={saving}>
@@ -177,8 +187,14 @@ export default function Viajes({ vehicles }) {
               onInput={event => field('departAt', event.target.value)} onChange={event => field('departAt', event.target.value)} required />
             <label htmlFor="trip-capacity">Cupos ofrecidos</label>
             <input id="trip-capacity" type="number" min="1" step="1" value={draft.capacity} onChange={event => field('capacity', event.target.value)} required />
-            <label htmlFor="trip-fuel">Precio del galón (COP)</label>
-            <input id="trip-fuel" type="number" min="1" step="1" value={draft.fuelPrice} onChange={event => field('fuelPrice', event.target.value)} required />
+            {tarifa ? (
+              <p>Precio del galón: {pesos.format(editing ? Number(draft.fuelPrice) : tarifa.fuelPriceCopPerGallon)}</p>
+            ) : (
+              <>
+                <label htmlFor="trip-fuel">Precio de prueba por galón (COP)</label>
+                <input id="trip-fuel" type="number" min="1" step="1" value={draft.fuelPrice} onChange={event => field('fuelPrice', event.target.value)} required />
+              </>
+            )}
           </fieldset>
           <p>Selecciona las paradas en orden, con la USC en un extremo. Las horas deben aumentar en cada parada.</p>
           {labels.map((label, index) => {
