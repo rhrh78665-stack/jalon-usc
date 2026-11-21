@@ -1,42 +1,48 @@
 import React, { useEffect, useState } from 'react'
 
+const base = '/api/movilidad'
+
 export default function Movilidad() {
     const [requests, setRequests] = useState(null)
+    const [drivers, setDrivers] = useState(null)
+    const [revision, setRevision] = useState(0)
     const [busy, setBusy] = useState(false)
     const [message, setMessage] = useState(null)
 
     useEffect(() => {
         const controller = new AbortController()
 
-        async function loadRequests() {
+        async function load(resource, setData) {
             try {
-                const response = await fetch('/api/movilidad/solicitudes', { signal: controller.signal })
+                const response = await fetch(base + '/' + resource, { signal: controller.signal })
                 const data = await response.json()
+                if (controller.signal.aborted) return
 
                 if (response.ok) {
-                    setRequests(data)
+                    setData(data)
                 } else {
                     setMessage({ error: true, text: data.message })
                 }
             } catch {
                 if (!controller.signal.aborted) {
-                    setMessage({ error: true, text: 'No se pudieron cargar las solicitudes.' })
+                    setMessage({ error: true, text: 'No se pudo cargar el panel de Movilidad.' })
                 }
             }
         }
 
-        loadRequests()
+        load('solicitudes', setRequests)
+        load('conductores', setDrivers)
         return () => controller.abort()
-    }, [])
+    }, [revision])
 
-    async function review(event, userId) {
+    async function save(event, resource, id, successText) {
         event.preventDefault()
         const fields = Object.fromEntries(new FormData(event.currentTarget))
         setMessage(null)
         setBusy(true)
 
         try {
-            const response = await fetch('/api/movilidad/solicitudes/' + encodeURIComponent(userId), {
+            const response = await fetch(base + '/' + resource + '/' + encodeURIComponent(id), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(fields),
@@ -48,13 +54,23 @@ export default function Movilidad() {
                 return
             }
 
-            setRequests(current => current.filter(request => request.id !== userId))
-            setMessage({ text: data.status === 'approved' ? 'Cuenta aprobada.' : 'Cuenta rechazada.' })
+            setRevision(current => current + 1)
+            setMessage({ text: successText(data) })
         } catch {
             setMessage({ error: true, text: 'No se pudo guardar la decisión.' })
         } finally {
             setBusy(false)
         }
+    }
+
+    function review(event, id) {
+        return save(event, 'solicitudes', id, data =>
+            data.status === 'approved' ? 'Cuenta aprobada.' : 'Cuenta rechazada.',
+        )
+    }
+
+    function enableDriver(event, id) {
+        return save(event, 'conductores', id, () => 'Conductor habilitado.')
     }
 
     return (
@@ -93,6 +109,30 @@ export default function Movilidad() {
                     </label>
 
                     <button disabled={busy}>Guardar decisión</button>
+                </form>
+            ))}
+
+            <h2>Habilitación de conductores</h2>
+
+            {drivers === null && !message && <p>Cargando miembros aprobados…</p>}
+            {drivers?.length === 0 && <p>No hay miembros aprobados.</p>}
+
+            {drivers?.map(driver => (
+                <form key={driver.id} onSubmit={event => enableDriver(event, driver.id)}>
+                    <h3>{driver.email}</h3>
+                    <p>{driver.enabled ? 'Habilitado hasta ' + driver.expiresOn : 'Sin permiso vigente'}</p>
+
+                    <label>
+                        Vencimiento de licencia de prueba
+                        <input
+                            name="expiresOn"
+                            type="date"
+                            defaultValue={driver.expiresOn ?? ''}
+                            required
+                        />
+                    </label>
+
+                    <button disabled={busy}>Habilitar conductor</button>
                 </form>
             ))}
 

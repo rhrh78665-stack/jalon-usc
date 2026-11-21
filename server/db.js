@@ -3,10 +3,10 @@ import { mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
 export async function openDatabase(path) {
-  if (path) await mkdir(dirname(path), { recursive: true })
+    if (path) await mkdir(dirname(path), { recursive: true })
 
-  const db = new PGlite(path)
-  await db.exec(`
+    const db = new PGlite(path)
+    await db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id text PRIMARY KEY,
       email text NOT NULL UNIQUE,
@@ -44,7 +44,14 @@ export async function openDatabase(path) {
 
     CREATE UNIQUE INDEX IF NOT EXISTS approved_membership_code
       ON membership_reviews (code) WHERE decision = 'approved';
+
+    CREATE TABLE IF NOT EXISTS driver_permissions (
+      user_id text PRIMARY KEY REFERENCES users(id),
+      reviewer_id text NOT NULL REFERENCES users(id),
+      license_expires_on date NOT NULL,
+      enabled_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `)
 
-  return db
+    return db
 }
