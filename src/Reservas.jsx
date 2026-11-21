@@ -64,6 +64,27 @@ export default function Reservas() {
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
             {booking.aporteFinalCop != null && <p>Aporte definitivo: {pesos.format(booking.aporteFinalCop)}</p>}
+            {booking.compensacionCop != null && (
+              <p>Pago externo registrado: {pesos.format(booking.compensacionCop)} · {booking.compensacionConfirmadaEn ? 'Confirmado' : 'Pendiente de confirmación'}</p>
+            )}
+            {!booking.canDecide && booking.compensacionCop != null && !booking.compensacionConfirmadaEn && (
+              <button type="button" disabled={saving !== null}
+                onClick={() => actualizar(booking.id, 'compensation/confirm', { method: 'POST' })}>Confirmar pago externo</button>
+            )}
+            {booking.canDecide && booking.aporteFinalCop > 0 && booking.compensacionCop == null && (
+              <form onSubmit={event => {
+                event.preventDefault()
+                const montoCop = Number(new FormData(event.currentTarget).get('montoCop'))
+                actualizar(booking.id, 'compensation', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ montoCop }),
+                })
+              }}>
+                <label>Monto recibido en COP
+                  <input name="montoCop" type="number" min="1" max={booking.aporteFinalCop} step="1" required />
+                </label>
+                <button disabled={saving !== null}>Registrar pago externo</button>
+              </form>
+            )}
             {booking.canCancel && (
               <button type="button" disabled={saving !== null} onClick={() => actualizar(booking.id, 'cancel', { method: 'POST' })}>
                 Cancelar mi reserva

@@ -198,4 +198,17 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     calculated.tramos[0].conductorCop = 1
     assert.throws(() => verificarLiquidacion(calculated, fixture, reservations), /conserva/)
   })
+
+  await t.test('CP-F028 solo admite monto liquidado y confirma el pasajero correspondiente', async () => {
+    assert.equal((await compensation(member.id, 1251)).status, 409)
+    assert.equal((await compensation(absent.id, 1)).status, 409)
+    assert.equal((await compensation(member.id, 1000, 'other')).status, 403)
+    assert.equal((await compensation(member.id, 1000)).status, 201)
+    assert.equal((await compensation(member.id, 1000)).status, 409)
+    const path = `/api/reservations/${member.id}/compensation/confirm`
+    assert.equal((await post(path, undefined, 'other')).status, 404)
+    const first = await post(path, undefined, 'passenger')
+    assert.equal(first.status, 200)
+    assert.deepEqual((await post(path, undefined, 'passenger')).data, first.data)
+  })
 })

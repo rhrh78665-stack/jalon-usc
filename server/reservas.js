@@ -80,8 +80,11 @@ export function mountReservations(app, db, approvedSession, informar) {
               (r.passenger_id = $1 AND r.status IN ('Pendiente', 'Confirmada')
                AND t.status IN ('Programado', 'Lleno') AND t.depart_at > clock_timestamp()) AS "canCancel",
               CASE WHEN t.status = 'Completado' AND r.status = 'Confirmada'
-                   THEN (t.liquidation -> 'aportes' ->> r.id)::bigint END AS "aporteFinalCop"
+                   THEN (t.liquidation -> 'aportes' ->> r.id)::bigint END AS "aporteFinalCop",
+              c.amount_cop AS "compensacionCop", c.confirmed_at AS "compensacionConfirmadaEn"
+
        FROM reservations r JOIN trips t ON t.id = r.trip_id
+       LEFT JOIN compensations c ON c.reservation_id = r.id
        WHERE r.passenger_id = $1 OR t.driver_id = $1
        ORDER BY t.depart_at, r.id`, [id],
     )
