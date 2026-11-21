@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { api, pesos } from './Itinerario.jsx'
+import { api, nombreParada, pesos } from './Itinerario.jsx'
 
 export default function CierreViaje({ trip }) {
   const [cierre, setCierre] = useState(null)
@@ -59,7 +59,20 @@ export default function CierreViaje({ trip }) {
         </form>
       )}
       {trip.status === 'Completado' && cierre?.liquidation && (
-        <p>Costo total: {pesos.format(cierre.liquidation.totalCop)} · Aporte conductor: {pesos.format(cierre.liquidation.conductorCop)}</p>
+        <div>
+          <p>Costo total: {pesos.format(cierre.liquidation.totalCop)} · Aporte conductor: {pesos.format(cierre.liquidation.conductorCop)}</p>
+          {cierre.liquidation.tramos && (
+            <ul aria-label="Desglose de liquidación">
+              {cierre.liquidation.tramos.map(tramo => (
+                <li key={tramo.desde}>
+                  {nombreParada[tramo.desde]} → {nombreParada[tramo.hasta]} · costo {pesos.format(tramo.costoCop)}
+                  {' · conductor '}{pesos.format(tramo.conductorCop)}
+                  {' · pasajeros '}{pesos.format(tramo.costoCop - tramo.conductorCop)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   )

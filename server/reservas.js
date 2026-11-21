@@ -78,7 +78,9 @@ export function mountReservations(app, db, approvedSession, informar) {
     const { rows } = await db.query(
       `SELECT ${campos}, (t.driver_id = $1) AS "canDecide",
               (r.passenger_id = $1 AND r.status IN ('Pendiente', 'Confirmada')
-               AND t.status IN ('Programado', 'Lleno') AND t.depart_at > clock_timestamp()) AS "canCancel"
+               AND t.status IN ('Programado', 'Lleno') AND t.depart_at > clock_timestamp()) AS "canCancel",
+              CASE WHEN t.status = 'Completado' AND r.status = 'Confirmada'
+                   THEN (t.liquidation -> 'aportes' ->> r.id)::bigint END AS "aporteFinalCop"
        FROM reservations r JOIN trips t ON t.id = r.trip_id
        WHERE r.passenger_id = $1 OR t.driver_id = $1
        ORDER BY t.depart_at, r.id`, [id],

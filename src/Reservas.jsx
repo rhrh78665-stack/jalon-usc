@@ -63,6 +63,7 @@ export default function Reservas() {
             <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'} · {booking.status}</p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
+            {booking.aporteFinalCop != null && <p>Aporte definitivo: {pesos.format(booking.aporteFinalCop)}</p>}
             {booking.canCancel && (
               <button type="button" disabled={saving !== null} onClick={() => actualizar(booking.id, 'cancel', { method: 'POST' })}>
                 Cancelar mi reserva

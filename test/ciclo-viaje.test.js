@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { fijarCostos, horaLocal } from '../server/itinerarios.js'
+import { calcularLiquidacion } from '../server/liquidacion.js'
 import { expirarPendientes } from '../server/reservas.js'
 
 test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
@@ -147,4 +148,37 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     assert.equal(result.pricing.totalCostCop, 21000)
   })
 
+  let completed
+  let member
+  let absent
+  await t.test('CP-F026 liquida solo a ocupantes reales y guarda el desglose por tramo', async () => {
+    const ejemplo = calcularLiquidacion({
+      itinerary: [
+        { stopId: 'a', costToNextCop: 12000 },
+        { stopId: 'b', costToNextCop: 9000 },
+        { stopId: 'usc' },
+      ],
+    }, [
+      { id: 'p1', board_index: 0, alight_index: 2, attendance: 'Abordo', maximum_cop: 10500 },
+      { id: 'p2', board_index: 1, alight_index: 2, attendance: 'Ausente', maximum_cop: 4500 },
+    ])
+    assert.deepEqual(ejemplo.aportes, { p1: 10500, p2: 0 })
+    assert.equal(ejemplo.conductorCop, 10500)
+    completed = await publish(valid())
+    member = await confirmar(completed)
+    absent = await confirmar(completed, 'other', 'lido', 'usc')
+    await started(completed)
+    const result = await close(completed, [{ id: member.id, attendance: 'Abordo' }, { id: absent.id, attendance: 'Ausente' }])
+    assert.equal(result.status, 200, JSON.stringify(result.data))
+    const liquidation = result.data.liquidation
+    assert.equal(liquidation.aportes[member.id], 1250)
+    assert.equal(liquidation.aportes[absent.id], 0)
+    assert.equal(liquidation.conductorCop, 1250)
+    assert.deepEqual(liquidation.tramos.map(t => t.costoCop), [1500, 1000])
+    assert.equal((await bandeja('passenger')).data.find(r => r.id === member.id).aporteFinalCop, 1250)
+    assert.equal((await bandeja('other')).data.find(r => r.id === absent.id).aporteFinalCop, 0)
+    const retry = await close(completed, [])
+    assert.deepEqual(retry.data.liquidation, liquidation)
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM booking_warnings WHERE reservation_id = $1 AND reason = 'ausencia'", [absent.id])).rows[0].n, 1)
+  })
 })
