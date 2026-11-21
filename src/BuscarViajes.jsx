@@ -57,6 +57,9 @@ export default function BuscarViajes() {
         </select>
         <label htmlFor="search-date">Fecha (hora de Cali)</label>
         <input id="search-date" type="date" name="date" defaultValue={fechaFormulario(new Date()).slice(0, 10)} required />
+        <label htmlFor="search-time">Hora de llegada o disponibilidad (opcional)</label>
+        <input id="search-time" type="time" name="time" aria-describedby="search-time-help" />
+        <small id="search-time-help">Hacia la USC: llegar hasta 40 minutos antes de tu hora límite. Desde la USC: recoger desde tu hora disponible hasta 40 minutos después.</small>
         <button disabled={busy}>{busy ? 'Buscando…' : 'Buscar viajes'}</button>
       </form>
       {message && <p className="notice error" role="alert">{message}</p>}

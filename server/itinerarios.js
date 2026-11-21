@@ -100,3 +100,11 @@ export function cotizar(trip, reservations, origin, destination) {
     segments,
   }
 }
+
+export function diferenciaHorario(trip, quote, target) {
+  if (!target) return 0
+  const towardsUsc = trip.route.at(-1) === 'usc'
+  const actual = new Date(towardsUsc ? quote.alightAt : quote.boardAt).getTime()
+  const delta = towardsUsc ? target - actual : actual - target
+  return delta >= 0 && delta <= 40 * minute ? delta : null
+}

@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-012: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-013: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -114,5 +114,30 @@ test('RF-011 a RF-012: itinerarios, búsqueda y gestión de viajes', async t => 
     assert.equal((await request(searchPath(day, { page: '-1' }))).status, 400)
     assert.equal((await request(searchPath('2035-02-30'))).status, 400)
     assert.equal((await request(searchPath(day), { user: null })).status, 401)
+  })
+
+  await t.test('CP-F013 hacia USC acepta la ventana inclusiva y ordena por cercanía', async () => {
+    const day = nextDay()
+    const ids = {}
+    for (const arrival of ['06:15', '06:20', '06:55', '07:00', '07:05']) {
+      ids[arrival] = (await publish(valid(day, {
+        route: ['melendez', 'usc'], stopTimes: [day + 'T06:00', day + 'T' + arrival],
+      }))).id
+    }
+    const result = await request(searchPath(day, { time: '07:00' }))
+    assert.deepEqual(result.data.items.map(trip => trip.id), [ids['07:00'], ids['06:55'], ids['06:20']])
+  })
+
+  await t.test('CP-F013 desde USC acepta 17:00 y 17:40, excluye 16:59 y 17:41', async () => {
+    const day = nextDay()
+    const ids = {}
+    for (const departure of ['16:59', '17:00', '17:40', '17:41']) {
+      ids[departure] = (await publish(valid(day, {
+        departAt: day + 'T' + departure, route: ['usc', 'melendez'],
+        stopTimes: [day + 'T' + departure, day + 'T18:00'],
+      }))).id
+    }
+    const result = await request(searchPath(day, { origin: 'usc', destination: 'melendez', time: '17:00' }))
+    assert.deepEqual(result.data.items.map(trip => trip.id), [ids['17:00'], ids['17:40']])
   })
 })

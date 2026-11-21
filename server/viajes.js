@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { requireDriver } from './vehiculos.js'
-import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar } from './itinerarios.js'
+import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar, diferenciaHorario } from './itinerarios.js'
 
 const campos = `id, driver_id AS "driverId", vehicle_id AS "vehicleId",
   depart_at AS "departAt", capacity, route, status, itinerary, pricing`
@@ -63,10 +63,13 @@ export function mountTrips(app, db, approvedSession) {
 
   app.get('/api/trips/search', async (req, res) => {
     await approvedSession(req)
-    const { origin, destination, date } = req.query
+    const { origin, destination, date, time } = req.query
     validarParadas(origin, destination)
     requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Selecciona una fecha válida.')
     horaBogota(date + 'T00:00')
+    const hasTime = time !== undefined && time !== ''
+    if (hasTime) requireRule(typeof time === 'string' && /^\d{2}:\d{2}$/.test(time), 'Indica una hora válida.')
+    const target = hasTime ? new Date(horaBogota(date + 'T' + time)).getTime() : null
     const page = enteroConsulta(req.query.page, 1, 1000000)
     const pageSize = enteroConsulta(req.query.pageSize, 10, 50)
     const result = await db.transaction(async tx => {
@@ -80,10 +83,13 @@ export function mountTrips(app, db, approvedSession) {
         if (trip.route.indexOf(origin) < 0 || trip.route.indexOf(destination) <= trip.route.indexOf(origin)) continue
         const quote = cotizar(trip, bookings.filter(booking => booking.trip_id === trip.id), origin, destination)
         if (quote.availableSeats < 1) continue
-        if (horaLocal(quote.boardAt).slice(0, 10) !== date) continue
-        matches.push({ trip, quote })
+        if (!target && horaLocal(quote.boardAt).slice(0, 10) !== date) continue
+        const difference = diferenciaHorario(trip, quote, target)
+        if (difference === null) continue
+        matches.push({ trip, quote, difference })
       }
-      matches.sort((a, b) => new Date(a.trip.departAt).getTime() - new Date(b.trip.departAt).getTime() || a.trip.id.localeCompare(b.trip.id))
+      matches.sort((a, b) => a.difference - b.difference ||
+        new Date(a.trip.departAt).getTime() - new Date(b.trip.departAt).getTime() || a.trip.id.localeCompare(b.trip.id))
       return {
         page, pageSize, total: matches.length,
         items: matches.slice((page - 1) * pageSize, page * pageSize).map(({ trip, quote }) => vistaPublica(trip, quote)),
