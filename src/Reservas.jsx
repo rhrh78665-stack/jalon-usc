@@ -32,21 +32,23 @@ export default function Reservas() {
     }
   }, [])
 
-  async function decidir(id, decision) {
+  async function actualizar(id, action, options) {
     setSaving(id)
     setError('')
     try {
-      await api(`/api/reservations/${encodeURIComponent(id)}/decision`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision }),
-      })
+      await api(`/api/reservations/${encodeURIComponent(id)}/${action}`, options)
       window.dispatchEvent(new Event('jalon-trips-update'))
     } catch (failure) {
       setError(failure.message)
     } finally {
       setSaving(null)
     }
+  }
+
+  function decidir(id, decision) {
+    return actualizar(id, 'decision', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
+    })
   }
 
   return (
@@ -61,6 +63,11 @@ export default function Reservas() {
             <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'} · {booking.status}</p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
+            {booking.canCancel && (
+              <button type="button" disabled={saving !== null} onClick={() => actualizar(booking.id, 'cancel', { method: 'POST' })}>
+                Cancelar mi reserva
+              </button>
+            )}
             {booking.canDecide && booking.status === 'Pendiente' && (
               <div className="actions">
                 <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'confirmar')}>Confirmar</button>

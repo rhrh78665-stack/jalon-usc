@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { cotizar, validarParadas } from './itinerarios.js'
+import { registrarAdvertencia } from './advertencias.js'
 import { requireRule } from './rules.js'
 
 const campos = `r.id, r.trip_id AS "tripId", r.status, r.maximum_cop AS "maximumCop",
@@ -49,7 +50,9 @@ export function mountReservations(app, db, approvedSession, informar) {
   app.get('/api/reservations', async (req, res) => {
     const { id } = await approvedSession(req)
     const { rows } = await db.query(
-      `SELECT ${campos}, (t.driver_id = $1) AS "canDecide"
+      `SELECT ${campos}, (t.driver_id = $1) AS "canDecide",
+              (r.passenger_id = $1 AND r.status IN ('Pendiente', 'Confirmada')
+               AND t.status IN ('Programado', 'Lleno') AND t.depart_at > clock_timestamp()) AS "canCancel"
        FROM reservations r JOIN trips t ON t.id = r.trip_id
        WHERE r.passenger_id = $1 OR t.driver_id = $1
        ORDER BY t.depart_at, r.id`, [id],
@@ -83,6 +86,43 @@ export function mountReservations(app, db, approvedSession, informar) {
     })
     await informar([id, driverId], booking)
     res.status(201).json(booking)
+  })
+
+  app.post('/api/reservations/:id/cancel', async (req, res) => {
+    const { id } = await approvedSession(req)
+    const result = await db.transaction(async tx => {
+      const { rows: [reference] } = await tx.query(
+        'SELECT trip_id FROM reservations WHERE id = $1 AND passenger_id = $2', [req.params.id, id],
+      )
+      requireRule(reference, 'No se encontró una reserva propia.', 404)
+      const trip = await cargarViaje(tx, reference.trip_id)
+      const { rows: [booking] } = await tx.query('SELECT * FROM reservations WHERE id = $1 FOR UPDATE', [req.params.id])
+      if (booking.cancelled_by_passenger) return { booking: await consultarReserva(tx, booking.id) }
+      verificarApertura(trip)
+      requireRule(['Pendiente', 'Confirmada'].includes(booking.status), 'La reserva ya no está activa.', 409)
+      const { rows: [cancelled] } = await tx.query(
+        `UPDATE reservations SET status = 'Cancelada', cancelled_by_passenger = true
+         WHERE id = $1 AND (SELECT depart_at FROM trips WHERE id = $2) > clock_timestamp()
+         RETURNING id`, [booking.id, trip.id],
+      )
+      requireRule(cancelled, 'La postulación del viaje está cerrada.', 409)
+      if (booking.status === 'Confirmada') {
+        if (trip.status === 'Lleno') await tx.query("UPDATE trips SET status = 'Programado' WHERE id = $1", [trip.id])
+        const pickup = trip.itinerary[booking.board_index]?.estimatedAt
+        if (pickup) {
+          const { rows: [window] } = await tx.query(
+            "SELECT $1::timestamptz - clock_timestamp() < interval '60 minutes' AS late", [pickup],
+          )
+          if (window.late) {
+            await tx.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id])
+            await registrarAdvertencia(tx, booking, 'cancelacion_tardia')
+          }
+        }
+      }
+      return { booking: await consultarReserva(tx, booking.id), driverId: trip.driverId }
+    })
+    if (result.driverId) await informar([id, result.driverId], result.booking)
+    res.json(result.booking)
   })
 
   app.patch('/api/reservations/:id/decision', async (req, res) => {

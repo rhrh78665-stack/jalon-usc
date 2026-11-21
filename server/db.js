@@ -109,6 +109,15 @@ export async function openDatabase(path) {
     CREATE UNIQUE INDEX IF NOT EXISTS reservations_active_passenger_idx
       ON reservations (trip_id, passenger_id) WHERE status IN ('Pendiente', 'Confirmada');
     CREATE INDEX IF NOT EXISTS reservations_trip_status_idx ON reservations (trip_id, status);
+    ALTER TABLE reservations ADD COLUMN IF NOT EXISTS cancelled_by_passenger boolean NOT NULL DEFAULT false;
+    CREATE TABLE IF NOT EXISTS booking_warnings (
+      reservation_id text NOT NULL REFERENCES reservations(id),
+      passenger_id text NOT NULL REFERENCES users(id),
+      reason text NOT NULL CHECK (reason IN ('cancelacion_tardia', 'ausencia')),
+      created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (reservation_id, reason)
+    );
+    CREATE INDEX IF NOT EXISTS booking_warnings_passenger_date ON booking_warnings(passenger_id, created_at);
   `)
     return db
 }
