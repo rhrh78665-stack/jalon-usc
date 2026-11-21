@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-016: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -195,5 +195,65 @@ test('RF-011 a RF-016: itinerarios, búsqueda y gestión de viajes', async t => 
     assert.equal(after.count, before.count)
     assert.equal((await request('/api/trips/series', { method: 'POST', body: { ...body, dates: ['2035-02-30'] } })).status, 400)
     assert.equal((await request('/api/trips/series', { user: 'passenger', method: 'POST', body: { ...body, dates } })).status, 403)
+  })
+
+  await t.test('CP-F017 cancela viaje y reservas, desaparece de búsqueda y es idempotente', async () => {
+    const day = nextDay()
+    const trip = await publish(valid(day))
+    await booking(trip)
+    await booking(trip, { passenger: 'other', status: 'Pendiente' })
+    const cancel = () => request(`/api/trips/${trip.id}/cancel`, { method: 'POST', body: { reason: 'Cambio de horario' } })
+    assert.equal((await request(`/api/trips/${trip.id}/cancel`, { user: 'passenger', method: 'POST', body: { reason: 'Ajeno' } })).status, 403)
+    const response = await cancel()
+    assert.equal(response.status, 200)
+    assert.equal(response.data.status, 'Cancelado')
+    const { rows } = await db.query('SELECT status FROM reservations WHERE trip_id = $1', [trip.id])
+    assert.deepEqual(rows.map(row => row.status), ['Cancelada', 'Cancelada'])
+    assert.equal((await request(searchPath(day))).data.total, 0)
+    assert.equal((await request(detailPath(trip.id))).status, 404)
+    assert.deepEqual((await cancel()).data, response.data)
+  })
+
+  await t.test('CP-F017 rechaza viajes en curso o completados y motivos vacíos', async () => {
+    for (const status of ['EnCurso', 'Completado']) {
+      const trip = await publish(valid())
+      await db.query('UPDATE trips SET status = $2 WHERE id = $1', [trip.id, status])
+      assert.equal((await request(`/api/trips/${trip.id}/cancel`, { method: 'POST', body: { reason: 'Cambio' } })).status, 409)
+    }
+    const trip = await publish(valid())
+    assert.equal((await request(`/api/trips/${trip.id}/cancel`, { method: 'POST', body: { reason: '  ' } })).status, 400)
+  })
+
+  await t.test('CP-F017 informa después del guardado solo a participantes autorizados', async () => {
+    const trip = await publish(valid())
+    await booking(trip)
+    async function listen(user) {
+      const controller = new AbortController()
+      const response = await fetch(base + '/api/trips/events', { headers: { Cookie: cookies[user] }, signal: controller.signal })
+      assert.equal(response.status, 200)
+      const reader = response.body.getReader()
+      const ready = new TextDecoder().decode((await reader.read()).value)
+      assert.match(ready, /event: ready/)
+      return { reader, controller }
+    }
+    const passenger = await listen('passenger')
+    const outsider = await listen('outsider')
+    try {
+      const notice = passenger.reader.read()
+      const unrelated = outsider.reader.read().catch(() => ({ value: undefined }))
+      assert.equal((await request(`/api/trips/${trip.id}/cancel`, { method: 'POST', body: { reason: 'Evento de prueba' } })).status, 200)
+      const chunk = await Promise.race([notice, new Promise((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('No se recibió la cancelación')), 2000)
+        timer.unref()
+      })])
+      assert.match(new TextDecoder().decode(chunk.value), /trip-cancelled/)
+      const { rows: [saved] } = await db.query('SELECT status FROM trips WHERE id = $1', [trip.id])
+      assert.equal(saved.status, 'Cancelado')
+      const outcome = await Promise.race([unrelated.then(() => 'event'), new Promise(resolve => setTimeout(() => resolve('quiet'), 150))])
+      assert.equal(outcome, 'quiet')
+    } finally {
+      passenger.controller.abort()
+      outsider.controller.abort()
+    }
   })
 })

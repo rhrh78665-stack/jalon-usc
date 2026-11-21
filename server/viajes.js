@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { requireDriver } from './vehiculos.js'
-import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar, diferenciaHorario, fechasSerie } from './itinerarios.js'
+import {
+  horaBogota, horaLocal, validarParadas, crearItinerario, fijarCostos,
+  cotizar, diferenciaHorario, fechasSerie,
+} from './itinerarios.js'
 
 const campos = `id, driver_id AS "driverId", vehicle_id AS "vehicleId",
-  depart_at AS "departAt", capacity, route, status, itinerary, pricing`
+  depart_at AS "departAt", capacity, route, status, itinerary, pricing,
+  cancel_reason AS "cancelReason"`
 
 function jsonBody(req) {
   requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
@@ -55,6 +59,47 @@ function enteroConsulta(value, fallback, max) {
 }
 
 export function mountTrips(app, db, approvedSession) {
+  const listeners = new Map()
+
+  // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
+  async function informar(userIds, trip) {
+    await Promise.all([...new Set(userIds)].flatMap(id => [...(listeners.get(id) ?? [])].map(async listener => {
+      try {
+        await approvedSession(listener.req)
+        listener.res.write(`event: trip-cancelled\ndata: ${JSON.stringify({
+          tripId: trip.id, status: trip.status, reason: trip.cancelReason,
+        })}\n\n`)
+      } catch {
+        listener.res.end()
+      }
+    })))
+  }
+
+  app.get('/api/trips/events', async (req, res) => {
+    const { id } = await approvedSession(req)
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' })
+    res.flushHeaders()
+    const listener = { req, res }
+    const group = listeners.get(id) ?? new Set()
+    group.add(listener)
+    listeners.set(id, group)
+    res.write('retry: 3000\nevent: ready\ndata: {}\n\n')
+    const heartbeat = setInterval(async () => {
+      try {
+        await approvedSession(req)
+        res.write(': keepalive\n\n')
+      } catch {
+        res.end()
+      }
+    }, 15000)
+    heartbeat.unref()
+    res.on('close', () => {
+      clearInterval(heartbeat)
+      group.delete(listener)
+      if (!group.size) listeners.delete(id)
+    })
+  })
+
   app.get('/api/trips/mine', async (req, res) => {
     const { id } = await approvedSession(req)
     const { rows } = await db.query(`SELECT ${campos} FROM trips WHERE driver_id = $1 ORDER BY depart_at, id`, [id])
@@ -159,5 +204,29 @@ export function mountTrips(app, db, approvedSession) {
       return updated
     })
     res.json(saved)
+  })
+
+  app.post('/api/trips/:id/cancel', async (req, res) => {
+    const { id } = await approvedSession(req)
+    const { reason } = jsonBody(req)
+    requireRule(typeof reason === 'string' && reason.trim().length > 0 && reason.trim().length <= 500,
+      'Indica un motivo de cancelación de hasta 500 caracteres.')
+    const result = await db.transaction(async tx => {
+      const { rows: [trip] } = await tx.query(`SELECT ${campos} FROM trips WHERE id = $1 FOR UPDATE`, [req.params.id])
+      requireRule(trip, 'No se encontró el viaje.', 404)
+      requireRule(trip.driverId === id, 'Solo el propietario puede cancelar el viaje.', 403)
+      if (trip.status === 'Cancelado') return { trip, participants: [] }
+      requireRule(['Programado', 'Lleno'].includes(trip.status), 'Solo puedes cancelar un viaje que no ha iniciado.', 409)
+      const { rows: cancelled } = await tx.query(
+        `UPDATE reservations SET status = 'Cancelada' WHERE trip_id = $1
+         AND status IN ('Pendiente', 'Confirmada') RETURNING passenger_id`, [trip.id],
+      )
+      const { rows: [saved] } = await tx.query(
+        `UPDATE trips SET status = 'Cancelado', cancel_reason = $2 WHERE id = $1 RETURNING ${campos}`, [trip.id, reason.trim()],
+      )
+      return { trip: saved, participants: [id, ...cancelled.map(booking => booking.passenger_id)] }
+    })
+    await informar(result.participants, result.trip)
+    res.json(result.trip)
   })
 }

@@ -14,6 +14,8 @@ export default function Viajes({ vehicles }) {
   const [message, setMessage] = useState(null)
   const [draft, setDraft] = useState(emptyDraft)
   const [editing, setEditing] = useState(null)
+  const [cancelling, setCancelling] = useState(null)
+  const [reason, setReason] = useState('')
   const [series, setSeries] = useState(false)
   const [dates, setDates] = useState([])
   const [nextDate, setNextDate] = useState('')
@@ -106,6 +108,27 @@ export default function Viajes({ vehicles }) {
     }
   }
 
+  async function cancelar(event, tripId) {
+    event.preventDefault()
+    setSaving(true)
+    setMessage(null)
+    try {
+      const saved = await api(`/api/trips/${encodeURIComponent(tripId)}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+      })
+      setTrips(current => current.map(trip => trip.id === saved.id ? saved : trip))
+      if (editing === saved.id) resetForm()
+      setCancelling(null)
+      setReason('')
+      setMessage({ text: 'Viaje cancelado. Sus reservas activas también fueron canceladas.' })
+      window.dispatchEvent(new Event('jalon-trips-update'))
+    } catch (error) {
+      setMessage({ error: true, text: error.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <section aria-labelledby="trip-heading">
       <h2 id="trip-heading">Mis viajes</h2>
@@ -118,11 +141,21 @@ export default function Viajes({ vehicles }) {
             <strong>{horaLocal.format(new Date(trip.departAt))} · {trip.status}</strong>
             <Itinerario trip={trip} />
             <p>{trip.capacity} cupos ofrecidos</p>
+            {trip.cancelReason && <p>Motivo: {trip.cancelReason}</p>}
             {['Programado', 'Lleno'].includes(trip.status) && <>
               <div className="actions">
                 <button type="button" className="secondary" disabled={saving || new Date(trip.departAt) <= new Date()} onClick={() => editTrip(trip)}>Editar viaje</button>
+                <button type="button" className="secondary" disabled={saving} onClick={() => { setCancelling(trip.id); setReason('') }}>Cancelar viaje</button>
               </div>
-
+              {cancelling === trip.id && <form onSubmit={event => cancelar(event, trip.id)}>
+                <label htmlFor={`cancel-${trip.id}`}>Motivo de cancelación</label>
+                <textarea id={`cancel-${trip.id}`} value={reason} onChange={event => setReason(event.target.value)} maxLength={500} required disabled={saving} />
+                <small>Al confirmar, este viaje saldrá de la búsqueda y sus reservas activas se cancelarán.</small>
+                <div className="actions">
+                  <button className="danger" disabled={saving}>Confirmar cancelación</button>
+                  <button type="button" className="secondary" disabled={saving} onClick={() => setCancelling(null)}>Volver</button>
+                </div>
+              </form>}
             </>}
           </li>)}
         </ul>

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { paradas } from '../shared/paradas.js'
 
 export const nombreParada = Object.fromEntries(paradas.map(({ id, nombre }) => [id, nombre]))
@@ -29,4 +29,20 @@ export default function Itinerario({ trip }) {
       ))}
     </ol>
   )
+}
+
+export function AvisosViajes() {
+  const [notice, setNotice] = useState('')
+  useEffect(() => {
+    const events = new EventSource('/api/trips/events')
+    const refresh = () => window.dispatchEvent(new Event('jalon-trips-update'))
+    events.addEventListener('ready', refresh)
+    events.addEventListener('trip-cancelled', event => {
+      const change = JSON.parse(event.data)
+      setNotice(`Se canceló un viaje en el que participas. Motivo: ${change.reason}`)
+      refresh()
+    })
+    return () => events.close()
+  }, [])
+  return notice && <p className="notice" role="status">{notice}</p>
 }
