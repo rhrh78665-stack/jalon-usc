@@ -98,6 +98,24 @@ export function mountTrips(app, db, approvedSession) {
     res.json(result)
   })
 
+  app.get('/api/trips/:id', async (req, res) => {
+    await approvedSession(req)
+    const { origin, destination } = req.query
+    validarParadas(origin, destination)
+    const result = await db.transaction(async tx => {
+      const { rows: [trip] } = await tx.query(
+        `SELECT ${campos} FROM trips WHERE id = $1 AND status IN ('Programado', 'Lleno')
+         AND depart_at > clock_timestamp()`, [req.params.id],
+      )
+      requireRule(trip, 'El viaje ya no está disponible.', 404)
+      const { rows: bookings } = await tx.query("SELECT * FROM reservations WHERE trip_id = $1 AND status = 'Confirmada'", [trip.id])
+      const quote = cotizar(trip, bookings, origin, destination)
+      requireRule(quote.availableSeats > 0, 'No hay cupo en todos los tramos solicitados.', 409)
+      return vistaPublica(trip, quote)
+    })
+    res.json(result)
+  })
+
   app.post('/api/trips', async (req, res) => {
     const { id } = await approvedSession(req)
     const body = jsonBody(req)

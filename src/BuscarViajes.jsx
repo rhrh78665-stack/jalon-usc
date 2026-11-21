@@ -1,20 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { paradas } from '../shared/paradas.js'
-import { api, nombreParada, horaLocal, fechaFormulario } from './Itinerario.jsx'
+import Itinerario, { api, nombreParada, horaLocal, pesos, fechaFormulario } from './Itinerario.jsx'
 
 export default function BuscarViajes() {
   const [result, setResult] = useState(null)
+  const [detail, setDetail] = useState(null)
   const [message, setMessage] = useState(null)
   const [busy, setBusy] = useState(false)
   const searchRequest = useRef(null)
+  const detailRequest = useRef(null)
   const lastQuery = useRef(null)
 
   async function buscar(query) {
     lastQuery.current = query
     searchRequest.current?.abort()
+    detailRequest.current?.abort()
     const controller = new AbortController()
     searchRequest.current = controller
     setBusy(true)
+    setDetail(null)
     setMessage(null)
     try {
       const data = await api('/api/trips/search?' + new URLSearchParams(query), { signal: controller.signal })
@@ -35,8 +39,24 @@ export default function BuscarViajes() {
     return () => {
       window.removeEventListener('jalon-trips-update', refresh)
       searchRequest.current?.abort()
+      detailRequest.current?.abort()
     }
   }, [])
+
+  async function consultar(id) {
+    detailRequest.current?.abort()
+    const controller = new AbortController()
+    detailRequest.current = controller
+    setMessage(null)
+    setDetail(null)
+    try {
+      const query = new URLSearchParams({ origin: result.query.origin, destination: result.query.destination })
+      const data = await api(`/api/trips/${encodeURIComponent(id)}?${query}`, { signal: controller.signal })
+      if (!controller.signal.aborted) setDetail(data)
+    } catch (error) {
+      if (!controller.signal.aborted) setMessage(error.message)
+    }
+  }
 
   return (
     <section aria-labelledby="search-heading">
@@ -72,6 +92,7 @@ export default function BuscarViajes() {
                 <strong>{nombreParada[result.query.origin]} → {nombreParada[result.query.destination]}</strong>
                 <p>Subida: {horaLocal.format(new Date(trip.boardAt))}<br />Bajada: {horaLocal.format(new Date(trip.alightAt))}</p>
                 <p>{trip.availableSeats} cupos en todo tu recorrido</p>
+                <button type="button" disabled={busy} onClick={() => consultar(trip.id)}>Ver detalle y aporte</button>
               </li>
             ))}
           </ul>
@@ -86,7 +107,20 @@ export default function BuscarViajes() {
           )}
         </div>
       )}
-
+      {detail && (
+        <section className="trip-detail" aria-labelledby="detail-heading">
+          <h3 id="detail-heading">Detalle del viaje</h3>
+          <Itinerario trip={detail} />
+          <p><strong>Aporte estimado: {pesos.format(detail.estimatedCop)}</strong><br />Máximo de tu recorrido: {pesos.format(detail.maximumCop)}</p>
+          <p>El estimado considera la ocupación actual. El máximo se calcula con el conductor y un pasajero por tramo.</p>
+          <ul>
+            {detail.segments.map(segment => <li key={segment.from}>
+              {nombreParada[segment.from]} → {nombreParada[segment.to]}: {segment.distanceKm} km · estimado {pesos.format(segment.estimatedCop)} · máximo {pesos.format(segment.maximumCop)}
+            </li>)}
+          </ul>
+          <button type="button" className="secondary" onClick={() => setDetail(null)}>Cerrar detalle</button>
+        </section>
+      )}
     </section>
   )
 }

@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-013: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-014: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -99,6 +99,7 @@ test('RF-011 a RF-013: itinerarios, búsqueda y gestión de viajes', async t => 
     await booking(trip, { passenger: 'other', start: 1, end: 2, status: 'Pendiente' })
     assert.equal((await request(searchPath(day, { origin: 'lido' }))).data.total, 1)
     assert.equal((await request(searchPath(day, { origin: 'usc', destination: 'melendez' }))).data.total, 0)
+    assert.equal((await request(detailPath(trip.id))).status, 409)
   })
 
   await t.test('CP-F012 pagina sin divulgar identidad, vehículo ni reservas', async () => {
@@ -139,5 +140,19 @@ test('RF-011 a RF-013: itinerarios, búsqueda y gestión de viajes', async t => 
     }
     const result = await request(searchPath(day, { origin: 'usc', destination: 'melendez', time: '17:00' }))
     assert.deepEqual(result.data.items.map(trip => trip.id), [ids['17:00'], ids['17:40']])
+  })
+
+  await t.test('CP-F014 devuelve aporte y máximo sin modificar el viaje', async () => {
+    const trip = await publish(valid())
+    await booking(trip, { start: 1, end: 2 })
+    const result = await request(detailPath(trip.id), { user: 'passenger' })
+    assert.equal(result.status, 200)
+    assert.equal(result.data.maximumCop, 1250)
+    assert.equal(result.data.estimatedCop, 1083)
+    assert.equal(result.data.segments.length, 2)
+    assert.equal((await request(detailPath(trip.id, 'usc', 'melendez'))).status, 400)
+    assert.equal((await request(detailPath(trip.id), { user: null })).status, 401)
+    const mine = await request('/api/trips/mine')
+    assert.deepEqual(mine.data.find(item => item.id === trip.id), trip)
   })
 })
