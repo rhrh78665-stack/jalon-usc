@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
 import Vehiculos from './Vehiculos.jsx'
+import BuscarViajes from './BuscarViajes.jsx'
 import { EnlacesCuenta, Perfil } from './Cuenta.jsx'
 import './styles.css'
 
@@ -120,7 +121,7 @@ function Access() {
                         {busy ? 'Cerrando…' : 'Cerrar sesión'}
                     </button>
           <Perfil />
-                    {session.mobility ? <Movilidad /> : <Vehiculos />}
+                    {session.mobility ? <Movilidad /> : <><BuscarViajes /><Vehiculos /></>}
                 </>
             ) : (
                 <>

@@ -20,6 +20,11 @@ export function horaLocal(value) {
   return new Date(new Date(value).getTime() - 5 * 60 * minute).toISOString().slice(0, 16)
 }
 
+export function validarParadas(origin, destination) {
+  requireRule(validStops.has(origin) && validStops.has(destination) && origin !== destination,
+    'Selecciona dos paradas distintas del catálogo.')
+}
+
 export function crearItinerario(route, stopTimes, departure, catalog = tramos) {
   requireRule(
     Array.isArray(route) && route.length >= 2 && route.length <= paradas.length &&
@@ -65,4 +70,33 @@ export function fijarCostos(itinerary, efficiency, fuelPriceCopPerGallon) {
     return { ...stop, costToNextCop: cost }
   })
   return { itinerary: result, pricing: { currency: 'COP', efficiency, fuelPriceCopPerGallon } }
+}
+
+export function cotizar(trip, reservations, origin, destination) {
+  const start = trip.route.indexOf(origin)
+  const end = trip.route.indexOf(destination)
+  requireRule(start >= 0 && end > start, 'La subida debe estar antes de la bajada en el viaje.')
+  requireRule(trip.itinerary.length === trip.route.length,
+    'Este viaje necesita completar sus horarios y distancias.')
+  const segments = trip.itinerary.slice(start, end).map(stop => {
+    const occupants = reservations.filter(booking => booking.status === 'Confirmada' &&
+      booking.board_index <= stop.position && booking.alight_index > stop.position).length
+    requireRule(Number.isSafeInteger(stop.costToNextCop) && stop.costToNextCop >= 0,
+      'El viaje no tiene costos registrados para este tramo.')
+    return {
+      from: stop.stopId, to: trip.route[stop.position + 1],
+      distanceKm: stop.distanceToNextKm, costCop: stop.costToNextCop,
+      availableSeats: Math.max(0, trip.capacity - occupants),
+      estimatedCop: Math.floor(stop.costToNextCop / (occupants + 2)),
+      maximumCop: Math.floor(stop.costToNextCop / 2),
+    }
+  })
+  return {
+    boardAt: trip.itinerary[start].estimatedAt,
+    alightAt: trip.itinerary[end].estimatedAt,
+    availableSeats: Math.min(...segments.map(segment => segment.availableSeats)),
+    estimatedCop: segments.reduce((sum, segment) => sum + segment.estimatedCop, 0),
+    maximumCop: segments.reduce((sum, segment) => sum + segment.maximumCop, 0),
+    segments,
+  }
 }

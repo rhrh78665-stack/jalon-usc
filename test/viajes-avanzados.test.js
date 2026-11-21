@@ -6,7 +6,7 @@ import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
 import { horaLocal } from '../server/itinerarios.js'
 
-test('RF-011 a RF-011: itinerarios, búsqueda y gestión de viajes', async t => {
+test('RF-011 a RF-012: itinerarios, búsqueda y gestión de viajes', async t => {
   const db = await openDatabase()
   const server = createApp(db).listen(0, '127.0.0.1')
   t.after(async () => {
@@ -86,5 +86,33 @@ test('RF-011 a RF-011: itinerarios, búsqueda y gestión de viajes', async t => 
     }
     const { rows: [after] } = await db.query('SELECT COUNT(*)::int AS count FROM trips')
     assert.equal(after.count, before.count)
+  })
+
+  await t.test('CP-F012 filtra cupos por todo el intervalo y las pendientes no ocupan', async () => {
+    const day = nextDay()
+    const trip = await publish(valid(day, { capacity: 1 }))
+    await booking(trip, { start: 0, end: 1 })
+    assert.equal((await request(searchPath(day))).data.total, 0)
+    const available = await request(searchPath(day, { origin: 'lido' }))
+    assert.equal(available.data.total, 1)
+    assert.equal(available.data.items[0].availableSeats, 1)
+    await booking(trip, { passenger: 'other', start: 1, end: 2, status: 'Pendiente' })
+    assert.equal((await request(searchPath(day, { origin: 'lido' }))).data.total, 1)
+    assert.equal((await request(searchPath(day, { origin: 'usc', destination: 'melendez' }))).data.total, 0)
+  })
+
+  await t.test('CP-F012 pagina sin divulgar identidad, vehículo ni reservas', async () => {
+    const day = nextDay()
+    for (let i = 0; i < 3; i++) await publish(valid(day))
+    const first = await request(searchPath(day, { pageSize: '2' }), { user: 'passenger' })
+    const second = await request(searchPath(day, { pageSize: '2', page: '2' }), { user: 'passenger' })
+    assert.equal(first.data.total, 3)
+    assert.equal(first.data.items.length, 2)
+    assert.equal(second.data.items.length, 1)
+    assert.equal(new Set([...first.data.items, ...second.data.items].map(trip => trip.id)).size, 3)
+    for (const trip of first.data.items) for (const field of ['driverId', 'vehicleId', 'passengerId', 'email', 'reservations']) assert.equal(field in trip, false)
+    assert.equal((await request(searchPath(day, { page: '-1' }))).status, 400)
+    assert.equal((await request(searchPath('2035-02-30'))).status, 400)
+    assert.equal((await request(searchPath(day), { user: null })).status, 401)
   })
 })

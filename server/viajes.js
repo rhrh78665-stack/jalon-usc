@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { requireDriver } from './vehiculos.js'
-import { horaBogota, crearItinerario, fijarCostos } from './itinerarios.js'
+import { horaBogota, crearItinerario, fijarCostos, horaLocal, validarParadas, cotizar } from './itinerarios.js'
 
 const campos = `id, driver_id AS "driverId", vehicle_id AS "vehicleId",
   depart_at AS "departAt", capacity, route, status, itinerary, pricing`
@@ -40,11 +40,56 @@ async function crearViaje(tx, driverId, body) {
   return saved
 }
 
+function vistaPublica(trip, quote) {
+  return {
+    id: trip.id, departAt: trip.departAt, route: trip.route, itinerary: trip.itinerary,
+    status: trip.status, ...quote,
+  }
+}
+
+function enteroConsulta(value, fallback, max) {
+  if (value === undefined) return fallback
+  requireRule(typeof value === 'string' && /^[1-9]\d*$/.test(value) &&
+    Number.isSafeInteger(Number(value)) && Number(value) <= max, 'La paginación no es válida.')
+  return Number(value)
+}
+
 export function mountTrips(app, db, approvedSession) {
   app.get('/api/trips/mine', async (req, res) => {
     const { id } = await approvedSession(req)
     const { rows } = await db.query(`SELECT ${campos} FROM trips WHERE driver_id = $1 ORDER BY depart_at, id`, [id])
     res.json(rows)
+  })
+
+  app.get('/api/trips/search', async (req, res) => {
+    await approvedSession(req)
+    const { origin, destination, date } = req.query
+    validarParadas(origin, destination)
+    requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Selecciona una fecha válida.')
+    horaBogota(date + 'T00:00')
+    const page = enteroConsulta(req.query.page, 1, 1000000)
+    const pageSize = enteroConsulta(req.query.pageSize, 10, 50)
+    const result = await db.transaction(async tx => {
+      const { rows: trips } = await tx.query(
+        `SELECT ${campos} FROM trips WHERE status IN ('Programado', 'Lleno')
+         AND depart_at > clock_timestamp() AND jsonb_array_length(itinerary) >= 2`,
+      )
+      const { rows: bookings } = await tx.query("SELECT * FROM reservations WHERE status = 'Confirmada'")
+      const matches = []
+      for (const trip of trips) {
+        if (trip.route.indexOf(origin) < 0 || trip.route.indexOf(destination) <= trip.route.indexOf(origin)) continue
+        const quote = cotizar(trip, bookings.filter(booking => booking.trip_id === trip.id), origin, destination)
+        if (quote.availableSeats < 1) continue
+        if (horaLocal(quote.boardAt).slice(0, 10) !== date) continue
+        matches.push({ trip, quote })
+      }
+      matches.sort((a, b) => new Date(a.trip.departAt).getTime() - new Date(b.trip.departAt).getTime() || a.trip.id.localeCompare(b.trip.id))
+      return {
+        page, pageSize, total: matches.length,
+        items: matches.slice((page - 1) * pageSize, page * pageSize).map(({ trip, quote }) => vistaPublica(trip, quote)),
+      }
+    })
+    res.json(result)
   })
 
   app.post('/api/trips', async (req, res) => {
