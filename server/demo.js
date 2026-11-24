@@ -18,11 +18,11 @@ const port = Number(process.env.PORT ?? 3001)
 const minute = 60000
 
 export async function seedDemo(db, now = Date.now()) {
-  const hash = await hashPassword(password)
   const tomorrow = horaLocal(new Date(now + 24 * 60 * minute)).slice(0, 10)
 
   await db.transaction(async tx => {
     for (const [id, email, alias, mobility] of accounts) {
+      const hash = await hashPassword(password)
       await tx.query(
         `INSERT INTO users (id, email, password, status, alias, mobility, email_verified_at)
          VALUES ($1, $2, $3, 'approved', $4, $5, CURRENT_TIMESTAMP)`, [id, email, hash, alias, mobility],

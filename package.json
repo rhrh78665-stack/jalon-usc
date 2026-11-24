@@ -9,7 +9,7 @@
   "scripts": {
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=2",
     "demo": "vite build && node server/demo.js",
     "quality:load": "node quality/load.mjs",
     "quality:browser": "npm run build && node quality/browser.mjs"
