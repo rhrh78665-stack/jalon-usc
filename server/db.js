@@ -249,6 +249,13 @@ export async function openDatabase(path) {
     CREATE TRIGGER reservation_change_time BEFORE INSERT OR UPDATE ON reservations
       FOR EACH ROW EXECUTE FUNCTION set_change_time();
 
+
+    CREATE TABLE IF NOT EXISTS login_attempts (
+      account_hash text PRIMARY KEY,
+      failures integer NOT NULL DEFAULT 0,
+      window_started timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      blocked_until timestamptz
+    );
   `)
     return db
 }

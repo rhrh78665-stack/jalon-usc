@@ -182,4 +182,18 @@ await t.test('RNF-006 cookies de sesión y revocación tras cierre', async () =>
     assert.equal((await fetch(base + '/api/session', { headers: { Cookie: token } })).status, 401)
   })
 
+await t.test('RNF-007 cinco fallos bloquean quince minutos y el vencimiento permite acceso', async () => {
+    const body = { email: 'invitado.demo@usc.edu.co', password: 'incorrecta-2026' }
+    for (let i = 0; i < 4; i++) assert.equal((await request('/api/login', { user: null, method: 'POST', body })).status, 401)
+    assert.equal((await request('/api/login', { user: null, method: 'POST', body })).status, 429)
+    body.password = 'JalonDemo-2026!'
+    assert.equal((await request('/api/login', { user: null, method: 'POST', body })).status, 429)
+    const digest = createHash('sha256').update(body.email).digest('hex')
+    const blocked = (await db.query('SELECT blocked_until > NOW() + interval \'14 minutes\' AS valid FROM login_attempts WHERE account_hash = $1', [digest])).rows[0]
+    assert.equal(blocked.valid, true)
+    await db.query("UPDATE login_attempts SET blocked_until = NOW() - interval '1 second' WHERE account_hash = $1", [digest])
+    assert.equal((await request('/api/login', { user: null, method: 'POST', body })).status, 200)
+    assert.equal((await db.query('SELECT * FROM login_attempts WHERE account_hash = $1', [digest])).rows.length, 0)
+  })
+
 })

@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { accountBlocked, recordAttempt } from './intentos.js'
 import { configureTransport } from './transporte.js'
 import { mountReputation } from './reputacion.js'
 import { mountPenalties } from './penalizaciones.js'
@@ -99,7 +100,10 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
             'SELECT id, email, password, status, mobility FROM users WHERE email = $1',
             [email],
         )
+        requireRule(!await accountBlocked(db, email), 'Acceso bloqueado temporalmente. Intenta en 15 minutos.', 429)
         const matches = await verifyPassword(req.body.password, user?.password ?? emptyHash)
+        const allowed = await recordAttempt(db, email, user?.status === 'approved' && matches)
+        requireRule(allowed, 'Acceso bloqueado temporalmente. Intenta en 15 minutos.', 429)
         const credentialsError = 'Credenciales inválidas o cuenta sin aprobar.'
         requireRule(user?.status === 'approved' && matches, credentialsError, 401)
 
