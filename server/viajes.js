@@ -78,11 +78,18 @@ export function mountTrips(app, db, approvedSession) {
   const search = tripSearch(db)
 
   // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
+
   async function informar(userIds, event, data) {
+    const reservationEvent = event === 'reservation-changed'
+    const { rows: [saved] } = await db.query(
+      reservationEvent ? 'SELECT changed_at FROM reservations WHERE id = $1' : 'SELECT changed_at FROM trips WHERE id = $1',
+      [reservationEvent ? data.id : data.tripId],
+    )
+    const payload = { ...data, ...(saved && { persistedAt: saved.changed_at }) }
     await Promise.all([...new Set(userIds)].flatMap(id => [...(listeners.get(id) ?? [])].map(async listener => {
       try {
         await approvedSession(listener.req)
-        listener.res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+        listener.res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`)
       } catch {
         listener.res.end()
       }

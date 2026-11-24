@@ -45,4 +45,35 @@ test('Atributos de calidad del MVP', async t => {
     assert.equal(next.data.items[0].driverId, undefined)
   })
 
+await t.test('RNF-002 un evento autorizado conserva la fecha persistida y excluye a terceros', async () => {
+    const controller = new AbortController()
+    const response = await fetch(base + '/api/trips/events', { headers: { Cookie: tokens['demo-passenger'] }, signal: controller.signal })
+    const reader = response.body.getReader()
+    let buffer = ''
+    async function nextEvent(name) {
+      while (true) {
+        const boundary = buffer.indexOf('\n\n')
+        if (boundary >= 0) {
+          const raw = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary + 2)
+          if (raw.includes('event: ' + name)) return JSON.parse(raw.match(/data: (.*)/)[1])
+        } else {
+          const result = await reader.read()
+          if (result.done) throw new Error('SSE cerrado')
+          buffer += new TextDecoder().decode(result.value)
+        }
+      }
+    }
+    await nextEvent('ready')
+    const body = { origin: 'melendez', destination: 'usc' }
+    const created = await request('/api/trips/demo-search/reservations', { method: 'POST', body })
+    assert.equal(created.status, 201)
+    const event = await nextEvent('reservation-changed')
+    const stored = (await db.query('SELECT changed_at FROM reservations WHERE id = $1', [created.data.id])).rows[0]
+    assert.equal(new Date(event.persistedAt).getTime(), new Date(stored.changed_at).getTime())
+    assert.ok(Date.now() - Date.parse(event.persistedAt) < 2000)
+    controller.abort()
+    await reader.cancel().catch(() => {})
+  })
+
 })

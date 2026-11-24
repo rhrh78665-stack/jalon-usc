@@ -46,21 +46,23 @@ export function AvisosViajes() {
   const [notice, setNotice] = useState('')
   useEffect(() => {
     const events = new EventSource('/api/trips/events')
-    const refresh = () => window.dispatchEvent(new Event('jalon-trips-update'))
+    const refresh = event => window.dispatchEvent(new CustomEvent('jalon-trips-update', {
+      detail: event?.data ? JSON.parse(event.data) : null,
+    }))
     events.addEventListener('ready', refresh)
     events.addEventListener('reservation-changed', event => {
       const { status } = JSON.parse(event.data)
       if (['Confirmada', 'Cancelada'].includes(status)) {
-        refresh()
+        refresh(event)
       } else {
-        window.dispatchEvent(new Event('jalon-reservas-update'))
+        window.dispatchEvent(new CustomEvent('jalon-reservas-update', { detail: JSON.parse(event.data) }))
       }
     })
     events.addEventListener('trip-state-changed', refresh)
     events.addEventListener('trip-cancelled', event => {
       const change = JSON.parse(event.data)
       setNotice(`Se canceló un viaje en el que participas. Motivo: ${change.reason}`)
-      refresh()
+      refresh(event)
     })
     return () => events.close()
   }, [])

@@ -233,6 +233,22 @@ export async function openDatabase(path) {
     CREATE TRIGGER invalidate_reservation_search AFTER INSERT OR UPDATE OR DELETE ON reservations
       FOR EACH STATEMENT EXECUTE FUNCTION invalidate_trip_search();
 
+
+    ALTER TABLE trips ADD COLUMN IF NOT EXISTS changed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP;
+    ALTER TABLE reservations ADD COLUMN IF NOT EXISTS changed_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP;
+    CREATE OR REPLACE FUNCTION set_change_time() RETURNS trigger AS $$
+    BEGIN
+      NEW.changed_at = clock_timestamp();
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS trip_change_time ON trips;
+    CREATE TRIGGER trip_change_time BEFORE INSERT OR UPDATE ON trips
+      FOR EACH ROW EXECUTE FUNCTION set_change_time();
+    DROP TRIGGER IF EXISTS reservation_change_time ON reservations;
+    CREATE TRIGGER reservation_change_time BEFORE INSERT OR UPDATE ON reservations
+      FOR EACH ROW EXECUTE FUNCTION set_change_time();
+
   `)
     return db
 }
