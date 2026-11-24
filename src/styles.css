@@ -288,3 +288,9 @@ small { color: var(--muted); }
 .reputation { color: var(--muted); font-size: .9rem; }
 .reputation p { margin: .5rem 0; }
 .reputation span { color: #765600; font-weight: 650; }
+
+.install-status { padding: .65rem 1rem; color: var(--muted); font-size: .85rem; }
+.install-status:empty { display: none; }
+.install-status summary { cursor: pointer; }
+.install-status p { max-width: 60rem; }
+.install-status button { width: auto; margin: 0; }

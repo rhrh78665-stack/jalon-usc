@@ -10,6 +10,9 @@ export const pesos = new Intl.NumberFormat('es-CO', { style: 'currency', currenc
 export const fechaFormulario = value => new Date(new Date(value).getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 16)
 
 export async function api(url, options) {
+  if (options?.method && options.method !== 'GET' && !navigator.onLine) {
+    throw new Error('Sin conexión. Conéctate para consultar o guardar cambios.')
+  }
   const response = await fetch(url, options)
   const result = await response.json()
   if (!response.ok) throw new Error(result.message || 'No se pudo completar la solicitud.')

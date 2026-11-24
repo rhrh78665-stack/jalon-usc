@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
 import Incidentes from './Incidentes.jsx'
+import Instalacion, { registerApp } from './Instalacion.jsx'
 import Vehiculos from './Vehiculos.jsx'
 import BuscarViajes from './BuscarViajes.jsx'
 import Reservas from './Reservas.jsx'
@@ -167,6 +168,7 @@ function Access() {
 
     return (
         <main className={session ? 'app-shell' : 'auth-shell'}>
+            <Instalacion />
             {session ? (
                 <Panel session={session} busy={busy} signOut={signOut} />
             ) : (
@@ -206,5 +208,7 @@ function Access() {
         </main>
     )
 }
+
+registerApp()
 
 createRoot(document.getElementById('root')).render(<Access />)

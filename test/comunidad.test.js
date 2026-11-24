@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { runInNewContext } from 'node:vm'
 import { once } from 'node:events'
 import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
@@ -190,6 +191,37 @@ await t.test('CP-F038 promedio con un decimal, cantidad, perfil sin notas y priv
     assert.equal((await request('/api/trips/demo-search?' + query)).data.driverId, undefined)
     const tripSummary = (await request('/api/trips/demo-search/reputation')).data
     assert.deepEqual(tripSummary, { count: 2, average: 4.5 })
+  })
+
+await t.test('CP-F039 manifest e iconos instalables y API sin caché ni escrituras offline', async () => {
+    const manifest = JSON.parse(await readFile(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'))
+    assert.equal(manifest.display, 'standalone')
+    assert.equal(manifest.start_url, '/')
+    for (const size of [192, 512]) {
+      const image = await readFile(new URL('../public/icon-' + size + '.png', import.meta.url))
+      assert.equal(image.readUInt32BE(16), size)
+      assert.equal(image.readUInt32BE(20), size)
+      assert.ok(manifest.icons.some(icon => icon.sizes === size + 'x' + size))
+    }
+    const listeners = {}
+    let cacheAccesses = 0
+    const source = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8')
+    runInNewContext(source, {
+      URL, Response, Request,
+      self: { location: new URL('http://localhost/sw.js?v=test'), addEventListener: (type, handler) => { listeners[type] = handler } },
+      fetch: async () => { throw new Error('offline') },
+      caches: { open: async () => { cacheAccesses++; return { match: async () => new Response('app shell') } } },
+    })
+    let response
+    listeners.fetch({ request: new Request('http://localhost/api/trips/x/reservations', { method: 'POST' }),
+      respondWith: promise => { response = promise } })
+    const offline = await response
+    assert.equal(offline.status, 503)
+    assert.match((await offline.json()).message, /Sin conexión/)
+    assert.equal(cacheAccesses, 0)
+    listeners.fetch({ request: { url: 'http://localhost/', method: 'GET', mode: 'navigate' },
+      respondWith: promise => { response = promise } })
+    assert.equal(await (await response).text(), 'app shell')
   })
 
 })
