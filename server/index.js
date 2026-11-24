@@ -9,6 +9,7 @@ export async function startServer(db, port, { cleanup = async () => {}, mail } =
     await once(server, 'listening')
 
     const expiration = setInterval(() => {
+        app.locals.procesarAvisos().catch(() => console.error('No se pudo actualizar la entrega de avisos.'))
         app.locals.expirarReservas().catch(() => console.error('No se pudo actualizar el vencimiento de reservas.'))
     }, 15000)
     expiration.unref()

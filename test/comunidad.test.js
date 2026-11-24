@@ -19,8 +19,9 @@ test('RF-031 a RF-039: comunidad y acceso móvil', async t => {
     )
     cookies[id] = 'jalon_session=' + token
   }
+  let failDelivery = false
   const messages = []
-  const app = createApp(db, undefined, { send: async message => messages.push(message), origin: 'http://127.0.0.1' })
+  const app = createApp(db, undefined, { send: async (message, options) => { if (failDelivery) throw new Error('fallo simulado'); messages.push({ ...message, ...options }) }, origin: 'http://127.0.0.1' })
   const server = app.listen(0, '127.0.0.1')
   t.after(async () => {
     server.closeAllConnections()
@@ -60,6 +61,37 @@ await t.test('CP-F032 solo Movilidad resuelve una vez y el remitente ve la decis
     assert.equal(report.status, 'Resuelto')
     assert.equal(report.resolution, body.resolution)
     assert.equal(report.reviewer, 'Movilidad Demo')
+  })
+
+await t.test('CP-F033 guarda el evento con la transacción y entrega una vez con reintentos', async () => {
+    await db.exec("UPDATE users SET trip_email_opt_in = true WHERE id = 'demo-passenger'")
+    await db.exec("UPDATE reservations SET status = 'Rechazada' WHERE id = 'demo-b-start'")
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM trip_notifications')).rows[0].n, 0)
+    await db.exec("UPDATE reservations SET status = 'Rechazada' WHERE id = 'demo-b-expire'")
+    failDelivery = true
+    await app.locals.procesarAvisos()
+    assert.equal(messages.length, 0)
+    assert.equal((await request('/api/notifications')).data[0].status, 'Pendiente')
+    failDelivery = false
+    await db.exec("UPDATE trip_notifications SET next_attempt_at = NOW()")
+    await Promise.all([app.locals.procesarAvisos(), app.locals.procesarAvisos()])
+    assert.equal(messages.length, 1)
+    assert.ok(messages[0].idempotencyKey.startsWith('jalon/'))
+    await db.exec("UPDATE reservations SET status = 'Rechazada' WHERE id = 'demo-b-expire'")
+    await app.locals.procesarAvisos()
+    assert.equal(messages.length, 1)
+    assert.equal((await request('/api/notifications', { user: 'outsider' })).data.length, 0)
+    await assert.rejects(db.transaction(async tx => {
+      await tx.exec("UPDATE reservations SET status = 'Cancelada' WHERE id = 'demo-b-cancel'")
+      throw new Error('rollback')
+    }))
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM trip_notifications')).rows[0].n, 1)
+    await db.exec("UPDATE reservations SET status = 'Cancelada' WHERE id = 'demo-b-cancel'")
+    await db.exec("UPDATE users SET trip_email_opt_in = false WHERE id = 'demo-passenger'")
+    await app.locals.procesarAvisos()
+    assert.equal(messages.length, 1)
+    assert.ok((await request('/api/notifications')).data.some(n => n.status === 'Omitido'))
+    await db.exec("UPDATE reservations SET status = 'Confirmada' WHERE id = 'demo-b-cancel'")
   })
 
 })

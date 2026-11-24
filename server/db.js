@@ -164,6 +164,61 @@ export async function openDatabase(path) {
     ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_by text REFERENCES users(id);
     ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
 
+
+    CREATE TABLE IF NOT EXISTS trip_notifications (
+      event_key text NOT NULL,
+      user_id text NOT NULL REFERENCES users(id),
+      subject text NOT NULL,
+      message text NOT NULL,
+      status text NOT NULL DEFAULT 'Pendiente'
+        CHECK (status IN ('Pendiente', 'Enviado', 'Omitido', 'Revisar')),
+      attempts integer NOT NULL DEFAULT 0,
+      first_attempt_at timestamptz,
+      next_attempt_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (event_key, user_id)
+    );
+
+    ALTER TABLE trip_notifications ADD COLUMN IF NOT EXISTS locked_until timestamptz;
+    ALTER TABLE trip_notifications ADD COLUMN IF NOT EXISTS lease_token text;
+    CREATE OR REPLACE FUNCTION queue_reservation_notice() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'UPDATE' THEN
+        IF NEW.status = OLD.status THEN RETURN NEW; END IF;
+      END IF;
+      INSERT INTO trip_notifications (event_key, user_id, subject, message)
+      SELECT 'reserva/' || NEW.id || '/' || NEW.status, u.id,
+        'Actualización de tu reserva en Jalón USC',
+        'Estado de la reserva: ' || NEW.status || '. Abre Jalón USC para consultar el viaje.'
+      FROM users u WHERE u.status = 'approved' AND u.trip_email_opt_in
+        AND u.email_verified_at IS NOT NULL AND
+        (u.id = NEW.passenger_id OR u.id = (SELECT driver_id FROM trips WHERE id = NEW.trip_id))
+      ON CONFLICT DO NOTHING;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS reservation_notification ON reservations;
+    CREATE TRIGGER reservation_notification AFTER INSERT OR UPDATE OF status ON reservations
+      FOR EACH ROW EXECUTE FUNCTION queue_reservation_notice();
+    CREATE OR REPLACE FUNCTION queue_trip_notice() RETURNS trigger AS $$
+    BEGIN
+      IF NEW.status = OLD.status OR NEW.status NOT IN ('EnCurso', 'Completado') THEN RETURN NEW; END IF;
+      INSERT INTO trip_notifications (event_key, user_id, subject, message)
+      SELECT 'viaje/' || NEW.id || '/' || NEW.status, u.id, 'Estado de tu viaje en Jalón USC',
+        'El viaje cambió a ' || NEW.status || '. Consulta los detalles en Jalón USC.'
+      FROM users u WHERE u.status = 'approved' AND u.trip_email_opt_in
+        AND u.email_verified_at IS NOT NULL AND (u.id = NEW.driver_id OR EXISTS (
+          SELECT 1 FROM reservations r WHERE r.trip_id = NEW.id
+          AND r.passenger_id = u.id AND r.status = 'Confirmada'))
+      ON CONFLICT DO NOTHING;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS trip_notification ON trips;
+    CREATE TRIGGER trip_notification AFTER UPDATE OF status ON trips
+      FOR EACH ROW EXECUTE FUNCTION queue_trip_notice();
+
   `)
     return db
 }

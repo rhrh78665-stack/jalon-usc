@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { notificationWorker, mountNotifications } from './avisos.js'
 import { mountIncidents } from './incidentes.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword, verifyPassword } from './auth.js'
@@ -55,6 +56,7 @@ function sessionView(user) {
 
 export function createApp(db, dist, mail = configurarCorreo(process.env, Number(process.env.PORT ?? 3000))) {
     const app = express()
+    app.locals.procesarAvisos = notificationWorker(db, mail)
     app.disable('x-powered-by')
     app.use('/api', (_req, res, next) => {
         res.set('Cache-Control', 'no-store')
@@ -141,6 +143,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
   mountVerification(app, db, mail)
 
     mountIncidents(app, db, req => approvedSession(db, req))
+    mountNotifications(app, db, req => approvedSession(db, req))
 
     if (dist) app.use(express.static(dist))
     app.use((error, _req, res, _next) => {

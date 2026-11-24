@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { hashPassword } from './auth.js'
 import { openDatabase } from './db.js'
 import { startServer } from './index.js'
+import { configurarCorreo } from './correo.js'
 import { crearItinerario, fijarCostos, horaBogota, horaLocal } from './itinerarios.js'
 
 const accounts = [
@@ -85,7 +86,8 @@ if (import.meta.main) {
     process.env.JALON_RESPONSE_MINUTES = '30'
     process.env.PORT = String(port)
     const date = await seedDemo(db)
-    const url = await startServer(db, port, { cleanup, mail: null })
+    const mail = process.env.JALON_MAIL_MODE === 'local' ? configurarCorreo(process.env, port) : null
+    const url = await startServer(db, port, { cleanup, mail })
     console.log('Jalón USC · demostración local: ' + url)
     console.log('Fecha de los viajes futuros (Cali): ' + date)
     console.log('Cuentas: ' + accounts.map(([, email]) => email).join(', '))
