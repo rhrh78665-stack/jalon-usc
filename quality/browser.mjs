@@ -10,7 +10,7 @@ import { seedDemo } from '../server/demo.js'
 import { report } from './report.mjs'
 
 const db = await openDatabase()
-await seedDemo(db)
+const demoDate = await seedDemo(db)
 const server = createApp(db, resolve('dist'), null).listen(0, '127.0.0.1')
 await once(server, 'listening')
 const url = 'http://127.0.0.1:' + server.address().port
@@ -27,23 +27,26 @@ async function open(user, width) {
   const page = await context.newPage()
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url)
-  await page.getByRole('button', { name: 'Ya tengo cuenta', exact: true }).click()
+  await keyboardActivate(page, page.getByRole('button', { name: 'Ya tengo cuenta', exact: true }))
   await page.getByLabel('Correo institucional', { exact: true }).fill(user + '.demo@usc.edu.co')
   await page.getByLabel('Contraseña', { exact: true }).fill('JalonDemo-2026!')
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await keyboardActivate(page, page.getByRole('button', { name: 'Entrar', exact: true }))
   await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).waitFor()
   return { page, browser, context }
 }
-async function keyboardActivate(page, locator) {
+async function keyboardFocus(page, locator) {
   for (let index = 0; index < 150; index++) {
     if (await locator.evaluate(element => element === document.activeElement)) {
       assert.ok(await locator.evaluate(element => getComputedStyle(element).outlineStyle !== 'none'))
-      await page.keyboard.press('Enter')
       return
     }
     await page.keyboard.press('Tab')
   }
   throw new Error('Acción no alcanzable con Tab: ' + await locator.textContent())
+}
+async function keyboardActivate(page, locator) {
+  await keyboardFocus(page, locator)
+  await page.keyboard.press('Enter')
 }
 const nav = (page, name) => page.getByRole('navigation', { name: 'Secciones de Jalón USC' }).getByRole('button', { name, exact: true }).click()
 try {
@@ -81,12 +84,100 @@ try {
     }
     await browser.close()
   }
+  const { page: publishPage, browser: publishBrowser } = await open('conductor', 1366)
+  await keyboardActivate(publishPage, publishPage.getByRole('navigation').getByRole('button', { name: 'Mis viajes', exact: true }))
+  const draft = [
+    ['#trip-vehicle', 'demo-car'], ['#trip-departure', demoDate + 'T18:00'], ['#trip-capacity', '2'],
+    ['#trip-stop-0', 'melendez'], ['#trip-stop-0-time', demoDate + 'T18:00'],
+    ['#trip-stop-3', 'usc'], ['#trip-stop-3-time', demoDate + 'T18:30'],
+  ]
+  for (const [selector, value] of draft) {
+    const field = publishPage.locator(selector)
+    await keyboardFocus(publishPage, field)
+    if (await field.evaluate(element => element.tagName === 'SELECT')) await field.selectOption(value)
+    else if (await field.getAttribute('readonly') !== null) assert.equal(await field.inputValue(), value)
+    else await field.fill(value)
+  }
+  await keyboardActivate(publishPage, publishPage.getByRole('button', { name: 'Publicar viaje', exact: true }))
+  await publishPage.getByText('Viaje publicado.', { exact: true }).waitFor()
+  await publishBrowser.close()
   const { page: keyboardPage, browser: keyboardBrowser } = await open('pasajero', 1366)
+  await keyboardPage.getByLabel('Fecha (hora de Cali)', { exact: true }).fill(demoDate)
   await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Buscar viajes', exact: true }).last())
-  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Ver detalle y aporte', exact: true }))
+  await keyboardActivate(keyboardPage, keyboardPage.locator('[data-trip-id="demo-search"]').getByRole('button', { name: 'Ver detalle y aporte', exact: true }))
+  const requested = keyboardPage.waitForResponse(response => response.url().endsWith('/api/trips/demo-search/reservations') && response.request().method() === 'POST')
   await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Solicitar asiento', exact: true }))
-  await keyboardPage.getByText(/Solicitud registrada/).waitFor()
-  await report('rnf012-keyboard', { criterion: 'RNF-012', actions: ['navegación', 'buscar', 'detalle', 'solicitar'], passed: true })
+  assert.equal((await requested).status(), 201)
+  await report('rnf012-keyboard', { criterion: 'RNF-012', actions: ['ingreso', 'navegación', 'publicar', 'buscar', 'detalle', 'solicitar'], passed: true })
+  await nav(keyboardPage, 'Reservas')
+  const driverLogin = await fetch(url + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'conductor.demo@usc.edu.co', password: 'JalonDemo-2026!' }) })
+  const driverCookie = driverLogin.headers.get('set-cookie').split(';')[0]
+  const mutation = async (path, options) => {
+    const response = await fetch(url + path, { ...options, headers: { Cookie: driverCookie, 'Content-Type': 'application/json' }, body: JSON.stringify(options.body) })
+    assert.ok(response.ok, await response.clone().text())
+    return response.json()
+  }
+  async function changedAt(id) {
+    return new Date((await db.query('SELECT changed_at FROM reservations WHERE id = $1', [id])).rows[0].changed_at).getTime()
+  }
+  const initial = (await db.query("SELECT id FROM reservations WHERE trip_id = 'demo-search' AND passenger_id = 'demo-passenger' AND status = 'Pendiente'")).rows
+  for (const row of initial) await mutation('/api/reservations/' + row.id + '/decision', { method: 'PATCH', body: { decision: 'rechazar' } })
+  const latencies = []
+  for (let index = 0; index < 25; index++) {
+    const created = await keyboardPage.request.post(url + '/api/trips/demo-search/reservations', { data: { origin: 'melendez', destination: 'usc' } })
+    assert.equal(created.status(), 201)
+    const booking = await created.json()
+    const row = keyboardPage.locator('[data-reservation-id="' + booking.id + '"]')
+    await row.locator('[data-status="Pendiente"]').waitFor()
+    latencies.push(Date.now() - await changedAt(booking.id))
+    await mutation('/api/reservations/' + booking.id + '/decision', { method: 'PATCH', body: { decision: 'rechazar' } })
+    await row.locator('[data-status="Rechazada"]').waitFor()
+    latencies.push(Date.now() - await changedAt(booking.id))
+  }
+  latencies.sort((a, b) => a - b)
+  const p95 = latencies[Math.ceil(latencies.length * .95) - 1]
+  assert.ok(p95 <= 2000, 'p95 SSE: ' + p95)
+  await report('rnf002-sse-visible', { criterion: 'RNF-002', samples: latencies.length, transport: 'SSE', persistenceToVisibleP95Milliseconds: p95, passed: true })
+  const reconnections = []
+  for (let index = 0; index < 10; index++) {
+    const created = await keyboardPage.request.post(url + '/api/trips/demo-search/reservations', { data: { origin: 'melendez', destination: 'usc' } })
+    const booking = await created.json()
+    await keyboardPage.locator('[data-reservation-id="' + booking.id + '"] [data-status="Pendiente"]').waitFor()
+    const context = keyboardPage.context()
+    await context.setOffline(true)
+    await keyboardPage.getByText('Sin conexión. Conéctate para consultar o guardar cambios.', { exact: true }).waitFor()
+    await mutation('/api/reservations/' + booking.id + '/decision', { method: 'PATCH', body: { decision: 'rechazar' } })
+    const start = Date.now()
+    await context.setOffline(false)
+    await keyboardPage.locator('[data-reservation-id="' + booking.id + '"] [data-status="Rechazada"]').waitFor({ timeout: 10000 })
+    reconnections.push(Date.now() - start)
+  }
+  assert.ok(reconnections.every(value => value <= 10000))
+  await report('rnf024-reconnections', { criterion: 'RNF-024', samples: 10, milliseconds: reconnections, passed: true })
+  await keyboardPage.context().route('**/api/trips/events', route => route.abort())
+  await keyboardPage.reload()
+  await nav(keyboardPage, 'Reservas')
+  const fallback = []
+  for (let index = 0; index < 3; index++) {
+    const created = await keyboardPage.request.post(url + '/api/trips/demo-search/reservations', { data: { origin: 'melendez', destination: 'usc' } })
+    assert.equal(created.status(), 201)
+    const booking = await created.json()
+    const row = keyboardPage.locator('[data-reservation-id="' + booking.id + '"]')
+    await row.locator('[data-status="Pendiente"]').waitFor({ timeout: 10000 })
+    fallback.push(Date.now() - await changedAt(booking.id))
+    await mutation('/api/reservations/' + booking.id + '/decision', { method: 'PATCH', body: { decision: 'rechazar' } })
+    await row.locator('[data-status="Rechazada"]').waitFor({ timeout: 10000 })
+    fallback.push(Date.now() - await changedAt(booking.id))
+  }
+  await report('rnf002-fallback', { criterion: 'RNF-002', transport: 'consulta de respaldo cada 3 s con SSE interrumpido', samples: fallback.length, milliseconds: fallback })
+  const browserVersion = keyboardBrowser.version()
+  const cdp = await keyboardPage.context().newCDPSession(keyboardPage)
+  const manifest = await cdp.send('Page.getAppManifest')
+  assert.deepEqual(manifest.errors, [])
+  assert.equal(JSON.parse(manifest.data).display, 'standalone')
+  await report('rnf018-desktop', { criterion: 'RNF-018', browser: 'Chromium', version: browserVersion, desktop: true, physicalMobileVerified: false, note: 'Se completa con quality/movil.html en un teléfono físico.' })
+  await report('rnf020-manifest', { criterion: 'RNF-020', manifestErrors: manifest.errors, physicalInstallationVerified: false })
   await keyboardBrowser.close()
   assert.deepEqual(errors, [])
   await report('rnf013-contrast', { criterion: 'RNF-013', viewports: [360, 768, 1366], sections: ['buscar', 'publicar', 'reservas'], violations: 0, passed: true })

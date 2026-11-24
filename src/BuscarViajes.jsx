@@ -144,7 +144,7 @@ export default function BuscarViajes() {
           {result.total > 0 && <p>{result.total === 1 ? '1 viaje disponible' : `${result.total} viajes disponibles`}</p>}
           <ul className="trip-list search-results" aria-label="Resultados de viajes">
             {result.items.map(trip => (
-              <li key={trip.id}>
+              <li key={trip.id} data-trip-id={trip.id}>
                 <div className="result-route">
                   <div><strong>{nombreParada[result.query.origin]}</strong><time dateTime={trip.boardAt}>{horaLocal.format(new Date(trip.boardAt))}</time></div>
                   <div><strong>{nombreParada[result.query.destination]}</strong><time dateTime={trip.alightAt}>{horaLocal.format(new Date(trip.alightAt))}</time></div>

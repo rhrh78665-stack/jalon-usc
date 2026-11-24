@@ -59,7 +59,7 @@ export default function Reservas() {
       {!items.length && !error && <p>Aún no hay reservas.</p>}
       <ul className="trip-list" aria-live="polite">
         {items.map(booking => (
-          <li key={booking.id}>
+          <li key={booking.id} data-reservation-id={booking.id}>
             <strong>{nombreParada[booking.origin]} → {nombreParada[booking.destination]}</strong>
             <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'}{' '}<span className="booking-status" data-status={booking.status}>{booking.status}</span></p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}

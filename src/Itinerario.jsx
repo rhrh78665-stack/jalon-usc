@@ -45,26 +45,54 @@ export default function Itinerario({ trip }) {
 export function AvisosViajes() {
   const [notice, setNotice] = useState('')
   useEffect(() => {
-    const events = new EventSource('/api/trips/events')
+    let events
+    let fallback = null
     const refresh = event => window.dispatchEvent(new CustomEvent('jalon-trips-update', {
       detail: event?.data ? JSON.parse(event.data) : null,
     }))
-    events.addEventListener('ready', refresh)
-    events.addEventListener('reservation-changed', event => {
-      const { status } = JSON.parse(event.data)
-      if (['Confirmada', 'Cancelada'].includes(status)) {
+    const refreshAll = () => {
+      if (!navigator.onLine) return
+      window.dispatchEvent(new CustomEvent('jalon-trips-update', { detail: { source: 'recovery' } }))
+      window.dispatchEvent(new CustomEvent('jalon-reservas-update', { detail: { source: 'recovery' } }))
+    }
+    const startFallback = () => {
+      if (!fallback) fallback = setInterval(refreshAll, 3000)
+    }
+    const connect = () => {
+      events?.close()
+      events = new EventSource('/api/trips/events')
+      events.addEventListener('error', startFallback)
+      events.addEventListener('ready', () => {
+        clearInterval(fallback)
+        fallback = null
+        refreshAll()
+      })
+      events.addEventListener('reservation-changed', event => {
+        const { status } = JSON.parse(event.data)
+        if (['Confirmada', 'Cancelada'].includes(status)) refresh(event)
+        else window.dispatchEvent(new CustomEvent('jalon-reservas-update', { detail: JSON.parse(event.data) }))
+      })
+      events.addEventListener('trip-state-changed', refresh)
+      events.addEventListener('trip-cancelled', event => {
+        const change = JSON.parse(event.data)
+        setNotice('Se canceló un viaje en el que participas. Motivo: ' + change.reason)
         refresh(event)
-      } else {
-        window.dispatchEvent(new CustomEvent('jalon-reservas-update', { detail: JSON.parse(event.data) }))
-      }
-    })
-    events.addEventListener('trip-state-changed', refresh)
-    events.addEventListener('trip-cancelled', event => {
-      const change = JSON.parse(event.data)
-      setNotice(`Se canceló un viaje en el que participas. Motivo: ${change.reason}`)
-      refresh(event)
-    })
-    return () => events.close()
+      })
+    }
+    const online = () => { startFallback(); refreshAll(); connect() }
+    const offline = () => { events?.close(); startFallback() }
+    const visible = () => { if (!document.hidden) refreshAll() }
+    window.addEventListener('online', online)
+    window.addEventListener('offline', offline)
+    document.addEventListener('visibilitychange', visible)
+    connect()
+    return () => {
+      clearInterval(fallback)
+      events?.close()
+      window.removeEventListener('online', online)
+      window.removeEventListener('offline', offline)
+      document.removeEventListener('visibilitychange', visible)
+    }
   }, [])
   return notice && <p className="notice" role="status">{notice}</p>
 }
