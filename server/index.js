@@ -1,3 +1,5 @@
+import { createServer as createHttpsServer } from 'node:https'
+import { readFile } from 'node:fs/promises'
 import { once } from 'node:events'
 import { resolve } from 'node:path'
 import { createApp } from './app.js'
@@ -5,7 +7,17 @@ import { openDatabase } from './db.js'
 
 export async function startServer(db, port, { cleanup = async () => {}, mail } = {}) {
     const app = createApp(db, resolve('dist'), mail)
-    const server = app.listen(port, '127.0.0.1')
+
+    const keyFile = process.env.JALON_TLS_KEY
+    const certFile = process.env.JALON_TLS_CERT
+    if (Boolean(keyFile) !== Boolean(certFile)) throw new Error('Configura JALON_TLS_KEY y JALON_TLS_CERT juntos.')
+    if (process.env.NODE_ENV === 'production' && !keyFile && !process.env.JALON_TRUST_PROXY) {
+        throw new Error('Producción requiere un certificado TLS o un proxy HTTPS de confianza configurado.')
+    }
+    const listener = keyFile ? createHttpsServer({
+        key: await readFile(keyFile), cert: await readFile(certFile),
+    }, app) : app
+    const server = listener.listen(port, process.env.JALON_HOST || '127.0.0.1')
     await once(server, 'listening')
 
     const expiration = setInterval(() => {
@@ -25,7 +37,7 @@ export async function startServer(db, port, { cleanup = async () => {}, mail } =
         })
     }
 
-    return 'http://127.0.0.1:' + server.address().port
+    return (keyFile ? 'https://127.0.0.1:' : 'http://127.0.0.1:') + server.address().port
 }
 
 if (import.meta.main) {

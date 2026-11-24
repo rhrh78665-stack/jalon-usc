@@ -82,7 +82,7 @@ if (import.meta.main) {
   const cleanup = () => rm(folder, { recursive: true, force: true })
   const db = await openDatabase(join(folder, 'pg'))
   try {
-    process.env.NODE_ENV = 'development'
+    process.env.NODE_ENV ??= 'development'
     process.env.JALON_RESPONSE_MINUTES = '30'
     process.env.PORT = String(port)
     const date = await seedDemo(db)

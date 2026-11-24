@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer as httpsServer, request as httpsRequest } from 'node:https'
+import { readFile } from 'node:fs/promises'
 import { once } from 'node:events'
 import { createHash, randomBytes, argon2 } from 'node:crypto'
 import { promisify } from 'node:util'
@@ -74,6 +76,40 @@ await t.test('RNF-002 un evento autorizado conserva la fecha persistida y excluy
     assert.ok(Date.now() - Date.parse(event.persistedAt) < 2000)
     controller.abort()
     await reader.cancel().catch(() => {})
+  })
+
+await t.test('RNF-003 producción exige HTTPS incluso con cabeceras falsificadas', async () => {
+    const previous = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    let secureApp
+    try { secureApp = createApp(db, undefined, null) }
+    finally { if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous }
+    const insecure = secureApp.listen(0, '127.0.0.1')
+    await once(insecure, 'listening')
+    try {
+      const response = await fetch('http://127.0.0.1:' + insecure.address().port + '/api/session', {
+        headers: { Cookie: tokens['demo-passenger'], 'X-Forwarded-Proto': 'https' },
+      })
+      assert.equal(response.status, 426)
+    } finally { insecure.closeAllConnections(); await new Promise(resolve => insecure.close(resolve)) }
+    const secure = httpsServer({
+      key: await readFile(new URL('./tls-key.pem', import.meta.url)),
+      cert: await readFile(new URL('./tls-cert.pem', import.meta.url)),
+    }, secureApp).listen(0, '127.0.0.1')
+    await once(secure, 'listening')
+    try {
+      const result = await new Promise((resolve, reject) => {
+        const req = httpsRequest({
+          host: '127.0.0.1', port: secure.address().port, path: '/api/session',
+          rejectUnauthorized: false, headers: { Cookie: tokens['demo-passenger'] },
+        }, response => { response.resume(); response.on('end', () => resolve(response)) })
+        req.on('error', reject)
+        req.end()
+      })
+      assert.equal(result.statusCode, 200)
+      assert.match(result.headers['strict-transport-security'], /max-age=/)
+      assert.equal(result.headers['x-content-type-options'], 'nosniff')
+    } finally { secure.closeAllConnections(); await new Promise(resolve => secure.close(resolve)) }
   })
 
 })

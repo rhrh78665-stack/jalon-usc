@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { configureTransport } from './transporte.js'
 import { mountReputation } from './reputacion.js'
 import { mountPenalties } from './penalizaciones.js'
 import { mountStops } from './paradas.js'
@@ -61,6 +62,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
     const app = express()
     app.locals.procesarAvisos = notificationWorker(db, mail)
     app.disable('x-powered-by')
+    configureTransport(app)
     app.use('/api', (_req, res, next) => {
         res.set('Cache-Control', 'no-store')
         next()
