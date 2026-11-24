@@ -4,6 +4,8 @@ import { once } from 'node:events'
 import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
+import { lateCancellation } from '../server/penalizaciones.js'
+import { registrarAdvertencia } from '../server/advertencias.js'
 import { nearbyStops } from '../shared/proximidad.js'
 import { mapPoints } from '../shared/mapa.js'
 import { paradas } from '../shared/paradas.js'
@@ -140,6 +142,31 @@ await t.test('CP-F036 persiste asistencia antes del cierre y bloquea reservas o 
       user: 'demo-driver', method: 'POST', body: { asistencia: [] },
     })).status, 200)
     assert.equal((await request(path, { user: 'demo-driver', method: 'PATCH', body })).status, 409)
+  })
+
+await t.test('CP-F037 distingue 59 y 60 minutos, no duplica y aplica suspensión por tres advertencias', async () => {
+    const now = Date.now()
+    assert.equal(lateCancellation(new Date(now + 59 * 60000), now), true)
+    assert.equal(lateCancellation(new Date(now + 60 * 60000), now), false)
+    assert.equal(lateCancellation(undefined, now), false)
+    await db.transaction(async tx => {
+      for (const id of ['demo-b-cancel', 'demo-b-close', 'demo-b-expire']) {
+        await registrarAdvertencia(tx, { id, passenger_id: 'demo-passenger' }, 'ausencia')
+      }
+      await registrarAdvertencia(tx, { id: 'demo-b-close', passenger_id: 'demo-passenger' }, 'ausencia')
+    })
+    const report = (await request('/api/penalties')).data
+    assert.equal(report.activeWarnings, 3)
+    assert.equal(report.suspended, true)
+    assert.equal(report.warnings.length, 3)
+    assert.equal((await request('/api/penalties', { user: 'outsider' })).data.warnings.length, 0)
+    assert.equal((await request('/api/trips/demo-search/reservations', {
+      method: 'POST', body: { origin: 'melendez', destination: 'usc' },
+    })).status, 403)
+    await db.exec("UPDATE booking_warnings SET created_at = NOW() - interval '31 days'")
+    await db.exec("UPDATE users SET suspended_until = NOW() - interval '1 minute' WHERE id = 'demo-passenger'")
+    assert.equal((await request('/api/penalties')).data.activeWarnings, 0)
+    assert.equal((await request('/api/penalties')).data.suspended, false)
   })
 
 })

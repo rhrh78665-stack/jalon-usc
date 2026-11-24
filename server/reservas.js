@@ -1,3 +1,4 @@
+import { lateCancellation } from './penalizaciones.js'
 import { randomUUID } from 'node:crypto'
 import { cotizar, validarParadas } from './itinerarios.js'
 import { registrarAdvertencia } from './advertencias.js'
@@ -148,14 +149,9 @@ export function mountReservations(app, db, approvedSession, informar) {
       if (booking.status === 'Confirmada') {
         await actualizarDisponibilidad(tx, trip)
         const pickup = trip.itinerary[booking.board_index]?.estimatedAt
-        if (pickup) {
-          const { rows: [window] } = await tx.query(
-            "SELECT $1::timestamptz - clock_timestamp() < interval '60 minutes' AS late", [pickup],
-          )
-          if (window.late) {
-            await tx.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id])
-            await registrarAdvertencia(tx, booking, 'cancelacion_tardia')
-          }
+        if (lateCancellation(pickup)) {
+          await tx.query('SELECT id FROM users WHERE id = $1 FOR UPDATE', [id])
+          await registrarAdvertencia(tx, booking, 'cancelacion_tardia')
         }
       }
       return { booking: await consultarReserva(tx, booking.id), driverId: trip.driverId }

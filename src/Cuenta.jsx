@@ -1,4 +1,5 @@
 import Avisos from './Avisos.jsx'
+import Penalizaciones from './Penalizaciones.jsx'
 import React, { useEffect, useState } from 'react'
 
 export function EnlacesCuenta({ link }) {
@@ -134,6 +135,7 @@ export function Perfil() {
           <button disabled={busy}>Guardar perfil</button>
         </form>
       )}
+      <Penalizaciones />
       <Avisos />
       {message && <p role={message.error ? 'alert' : 'status'}>{message.text}</p>}
     </section>
