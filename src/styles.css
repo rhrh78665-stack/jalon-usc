@@ -284,3 +284,7 @@ small { color: var(--muted); }
 .coordinate-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; }
 .nearby-stops li { margin: .8rem 0; }
 .nearby-stops li button { width: auto; margin-left: .6rem; }
+
+.reputation { color: var(--muted); font-size: .9rem; }
+.reputation p { margin: .5rem 0; }
+.reputation span { color: #765600; font-weight: 650; }

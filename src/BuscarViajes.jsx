@@ -1,3 +1,4 @@
+import Reputacion from './Reputacion.jsx'
 import ParadasCercanas from './ParadasCercanas.jsx'
 import React, { useEffect, useRef, useState } from 'react'
 import { paradas } from '../shared/paradas.js'
@@ -169,6 +170,7 @@ export default function BuscarViajes() {
       {detail && (
         <section className="trip-detail" aria-labelledby="detail-heading">
           <h3 id="detail-heading">Detalle del viaje</h3>
+          <Reputacion tripId={detail.id} />
           <Itinerario trip={detail} />
           <p><strong>Aporte estimado: {pesos.format(detail.estimatedCop)}</strong><br />Máximo de tu recorrido: {pesos.format(detail.maximumCop)}</p>
           <p>El estimado considera la ocupación actual. El máximo se calcula con el conductor y un pasajero por tramo.</p>

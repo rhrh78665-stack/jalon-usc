@@ -1,3 +1,4 @@
+import Reputacion from './Reputacion.jsx'
 import React, { useEffect, useState } from 'react'
 import { api, horaLocal, nombreParada, pesos } from './Itinerario.jsx'
 
@@ -62,6 +63,7 @@ export default function Reservas() {
             <strong>{nombreParada[booking.origin]} → {nombreParada[booking.destination]}</strong>
             <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'}{' '}<span className="booking-status" data-status={booking.status}>{booking.status}</span></p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
+            <Reputacion userId={booking.counterpartId} />
             <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
             {booking.aporteFinalCop != null && <p>Aporte definitivo: {pesos.format(booking.aporteFinalCop)}</p>}
             {booking.compensacionCop != null && (

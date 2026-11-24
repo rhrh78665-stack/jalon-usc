@@ -169,4 +169,27 @@ await t.test('CP-F037 distingue 59 y 60 minutos, no duplica y aplica suspensión
     assert.equal((await request('/api/penalties')).data.suspended, false)
   })
 
+await t.test('CP-F038 promedio con un decimal, cantidad, perfil sin notas y privacidad', async () => {
+    await db.exec("UPDATE reservations SET status = 'Confirmada', attendance = 'Abordo' WHERE id = 'demo-b-start'")
+    const rate = (user, stars) => request('/api/reservations/' +
+      (user === 'demo-passenger' ? 'demo-b-close' : 'demo-b-start') + '/rating', {
+      user, method: 'POST', body: { stars, review: 'Reseña para comprobar el promedio.' },
+    })
+    assert.equal((await rate('demo-passenger', 4)).status, 201)
+    assert.equal((await rate('demo-second', 5)).status, 201)
+    const result = (await request('/api/reputation/demo-driver')).data
+    assert.equal(result.average, 4.5)
+    assert.equal(result.count, 2)
+    assert.equal(result.email, undefined)
+    const empty = (await request('/api/reputation/mine', { user: 'outsider' })).data
+    assert.equal(empty.count, 0)
+    assert.equal(empty.average, null)
+    assert.equal((await request('/api/reputation/demo-driver', { user: null })).status, 401)
+    assert.equal((await request('/api/reputation/no-existe')).status, 404)
+    const query = new URLSearchParams({ origin: 'melendez', destination: 'usc' })
+    assert.equal((await request('/api/trips/demo-search?' + query)).data.driverId, undefined)
+    const tripSummary = (await request('/api/trips/demo-search/reputation')).data
+    assert.deepEqual(tripSummary, { count: 2, average: 4.5 })
+  })
+
 })

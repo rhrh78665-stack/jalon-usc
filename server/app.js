@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { mountReputation } from './reputacion.js'
 import { mountPenalties } from './penalizaciones.js'
 import { mountStops } from './paradas.js'
 import { notificationWorker, mountNotifications } from './avisos.js'
@@ -144,6 +145,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
   mountRecovery(app, db, mail)
   mountVerification(app, db, mail)
 
+    mountReputation(app, db, req => approvedSession(db, req))
     mountPenalties(app, db, req => approvedSession(db, req))
     mountStops(app, req => approvedSession(db, req))
     mountIncidents(app, db, req => approvedSession(db, req))

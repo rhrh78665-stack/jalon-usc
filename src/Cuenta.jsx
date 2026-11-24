@@ -1,4 +1,5 @@
 import Avisos from './Avisos.jsx'
+import Reputacion from './Reputacion.jsx'
 import Penalizaciones from './Penalizaciones.jsx'
 import React, { useEffect, useState } from 'react'
 
@@ -123,6 +124,7 @@ export function Perfil() {
   return (
     <section aria-labelledby="profile-heading">
       <h2 id="profile-heading">Mi perfil</h2>
+      <Reputacion />
       {profile && (
         <form onSubmit={save} key={JSON.stringify(profile)}>
           <label htmlFor="profile-alias">Alias visible</label>

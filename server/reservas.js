@@ -85,7 +85,7 @@ export function mountReservations(app, db, approvedSession, informar) {
               c.amount_cop AS "compensacionCop", c.confirmed_at AS "compensacionConfirmadaEn",
               (r.status = 'Confirmada' AND r.attendance = 'Abordo' AND t.status = 'Completado'
                AND clock_timestamp() <= t.completed_at + interval '7 days' AND q.author_id IS NULL) AS "canRate",
-              q.stars AS "misEstrellas", q.review AS "miResena",
+              q.stars AS "misEstrellas", q.review AS "miResena", counterpart.id AS "counterpartId",
               COALESCE(NULLIF(counterpart.alias, ''), CASE WHEN t.driver_id = $1 THEN 'Pasajero' ELSE 'Conductor' END) AS contraparte
 
        FROM reservations r JOIN trips t ON t.id = r.trip_id
