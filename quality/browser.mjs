@@ -32,6 +32,17 @@ async function open(user, width) {
   await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).waitFor()
   return { page, browser, context }
 }
+async function keyboardActivate(page, locator) {
+  for (let index = 0; index < 150; index++) {
+    if (await locator.evaluate(element => element === document.activeElement)) {
+      assert.ok(await locator.evaluate(element => getComputedStyle(element).outlineStyle !== 'none'))
+      await page.keyboard.press('Enter')
+      return
+    }
+    await page.keyboard.press('Tab')
+  }
+  throw new Error('Acción no alcanzable con Tab: ' + await locator.textContent())
+}
 const nav = (page, name) => page.getByRole('navigation', { name: 'Secciones de Jalón USC' }).getByRole('button', { name, exact: true }).click()
 try {
   for (const width of [360, 768, 1366]) {
@@ -45,6 +56,13 @@ try {
     }
     await browser.close()
   }
+  const { page: keyboardPage, browser: keyboardBrowser } = await open('pasajero', 1366)
+  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Buscar viajes', exact: true }).last())
+  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Ver detalle y aporte', exact: true }))
+  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Solicitar asiento', exact: true }))
+  await keyboardPage.getByText(/Solicitud registrada/).waitFor()
+  await report('rnf012-keyboard', { criterion: 'RNF-012', actions: ['navegación', 'buscar', 'detalle', 'solicitar'], passed: true })
+  await keyboardBrowser.close()
   assert.deepEqual(errors, [])
   await report('rnf011-responsive', { criterion: 'RNF-011', observations, passed: true })
 } finally {

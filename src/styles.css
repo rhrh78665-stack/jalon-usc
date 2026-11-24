@@ -306,3 +306,12 @@ fieldset { margin-inline: 0; }
   .actions { align-items: stretch; }
   .actions button { flex-basis: 100%; }
 }
+
+button:focus-visible, summary:focus-visible, a:focus-visible {
+  outline: 3px solid var(--blue-dark);
+  outline-offset: 3px;
+}
+.workspace-header :focus-visible { outline-color: var(--yellow); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+}
