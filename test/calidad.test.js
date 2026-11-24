@@ -196,4 +196,20 @@ await t.test('RNF-007 cinco fallos bloquean quince minutos y el vencimiento perm
     assert.equal((await db.query('SELECT * FROM login_attempts WHERE account_hash = $1', [digest])).rows.length, 0)
   })
 
+await t.test('RNF-008 búsqueda y detalle no revelan datos personales', async () => {
+    const detail = await request('/api/trips/demo-search?origin=melendez&destination=usc')
+    const date = detail.data.boardAt.slice(0, 10)
+    const search = await request('/api/trips/search?' + new URLSearchParams({ origin: 'melendez', destination: 'usc', date }))
+    const forbidden = new Set(['email', 'phone', 'telephone', 'code', 'plate', 'password', 'token_hash', 'driverId', 'user_id'])
+    function inspect(value) {
+      if (!value || typeof value !== 'object') return
+      for (const [key, child] of Object.entries(value)) {
+        assert.equal(forbidden.has(key), false, 'Dato privado: ' + key)
+        inspect(child)
+      }
+    }
+    inspect(detail.data); inspect(search.data)
+    assert.doesNotMatch(JSON.stringify(search.data), /@usc\.edu\.co/)
+  })
+
 })
