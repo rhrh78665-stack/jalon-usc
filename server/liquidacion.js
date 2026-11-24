@@ -1,4 +1,4 @@
-import { requireRule } from './rules.js'
+import { requireRule, validSegmentContribution } from './rules.js'
 
 export function calcularLiquidacion(trip, reservas) {
   requireRule(trip.itinerary.length >= 2, 'Completa el itinerario antes de cerrar.', 409)
@@ -34,8 +34,7 @@ export function verificarLiquidacion(liquidacion, trip, reservas) {
     requireRule(costoCop === trip.itinerary[position]?.costToNextCop, 'El costo del tramo no coincide.', 409)
     let suma = tramo.conductorCop
     for (const [id, monto] of Object.entries(tramo.aportes)) {
-      requireRule(sumas.has(id) && Number.isSafeInteger(monto) && monto >= 0 &&
-        monto <= Math.floor(costoCop / 2), 'Un aporte supera el tope del tramo.', 409)
+      requireRule(sumas.has(id) && validSegmentContribution(monto, costoCop), 'Un aporte supera el tope del tramo.', 409)
       suma += monto
       sumas.set(id, sumas.get(id) + monto)
     }

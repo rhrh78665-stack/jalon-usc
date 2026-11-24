@@ -22,3 +22,7 @@ export function institutionalEmail(value) {
     )
     return email
 }
+
+export function validSegmentContribution(amount, cost) {
+  return Number.isSafeInteger(amount) && amount >= 0 && amount <= Math.floor(cost / 2)
+}
