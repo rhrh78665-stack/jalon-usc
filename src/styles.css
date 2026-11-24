@@ -274,3 +274,7 @@ small { color: var(--muted); }
     .workspace-tabs button { font-size: .8rem; }
 }
 .workspace-panel .search-results.trip-list > li { border-inline-start-color: var(--blue); background: #fff; }
+
+.stop-map { margin: 1rem 0; max-width: 48rem; }
+.stop-map svg { display: block; width: 100%; height: auto; }
+.stop-map figcaption { margin-top: .35rem; color: var(--muted); font-size: .83rem; }

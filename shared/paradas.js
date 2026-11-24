@@ -1,8 +1,8 @@
 export const paradas = [
-  { id: 'melendez', nombre: 'Meléndez' },
-  { id: 'lido', nombre: 'El Lido' },
-  { id: 'unicentro', nombre: 'Unicentro' },
-  { id: 'usc', nombre: 'Campus USC' },
+  { id: 'melendez', nombre: 'Meléndez', latitude: 3.3775, longitude: -76.5485 },
+  { id: 'lido', nombre: 'El Lido', latitude: 3.4183, longitude: -76.5443 },
+  { id: 'unicentro', nombre: 'Unicentro', latitude: 3.3733, longitude: -76.5398 },
+  { id: 'usc', nombre: 'Campus USC', latitude: 3.4034, longitude: -76.5484 },
 ]
 
 // Catálogo ficticio para la demostración; no representa distancias viales medidas.

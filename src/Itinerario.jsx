@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import MapaParadas from './MapaParadas.jsx'
 import { paradas } from '../shared/paradas.js'
 
 export const nombreParada = Object.fromEntries(paradas.map(({ id, nombre }) => [id, nombre]))
@@ -22,6 +23,7 @@ export default function Itinerario({ trip }) {
   const total = trip.itinerary.reduce((sum, stop) => sum + (stop.costToNextCop ?? 0), 0)
   return (
     <>
+      <MapaParadas stops={trip.itinerary.map(stop => stop.stopId)} />
       <ol className="itinerary" aria-label="Itinerario del viaje">
         {trip.itinerary.map(stop => (
           <li key={stop.stopId}>

@@ -4,6 +4,9 @@ import { once } from 'node:events'
 import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
+import { mapPoints } from '../shared/mapa.js'
+import { paradas } from '../shared/paradas.js'
+import { readFile } from 'node:fs/promises'
 import { seedDemo } from '../server/demo.js'
 
 test('RF-031 a RF-039: comunidad y acceso móvil', async t => {
@@ -92,6 +95,15 @@ await t.test('CP-F033 guarda el evento con la transacción y entrega una vez con
     assert.equal(messages.length, 1)
     assert.ok((await request('/api/notifications')).data.some(n => n.status === 'Omitido'))
     await db.exec("UPDATE reservations SET status = 'Confirmada' WHERE id = 'demo-b-cancel'")
+  })
+
+await t.test('CP-F034 el catálogo conserva coordenadas y el esquema mantiene una lista ordenada', async () => {
+    assert.ok(paradas.every(stop => Number.isFinite(stop.latitude) && Number.isFinite(stop.longitude)))
+    const ordered = mapPoints(['usc', 'melendez', 'lido'])
+    assert.deepEqual(ordered.map(stop => stop.id), ['usc', 'melendez', 'lido'])
+    assert.ok(ordered.every(stop => stop.x >= 80 && stop.x <= 560 && stop.y >= 60 && stop.y <= 220))
+    assert.deepEqual(mapPoints(['unknown', 'usc']), [])
+    assert.equal(mapPoints(['melendez', 'usc']).length, 2)
   })
 
 })
