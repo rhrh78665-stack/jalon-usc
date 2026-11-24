@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Prueba de reserva</title>
+<style>body{font:18px system-ui;max-width:52rem;margin:2rem auto;padding:1rem;color:#111c36}button,input{font:inherit;margin:.5rem;padding:.6rem}button{background:#174ec9;color:white;border:0;border-radius:.4rem}label{display:block}li{margin:1rem 0}</style>
+<h1>RNF-014 · Reserva comprensible</h1>
+<p>Prueba con cinco participantes reales, de forma individual. Entrega únicamente esta tarea: «Busca un viaje a la USC y solicita un asiento». No indiques qué botones pulsar. Utiliza una demostración nueva o cancela la solicitud entre participantes.</p>
+<p>El identificador será anónimo. Inicia el cronómetro cuando la persona vea la tarea y detenlo al terminar o abandonar. Marca si recibió ayuda. El resultado exige al menos cuatro de cinco solicitudes completadas sin ayuda en 180 segundos o menos.</p>
+<label>Participante <input id="person" placeholder="P01" required></label>
+<label><input type="checkbox" id="success"> Completó la solicitud</label>
+<label><input type="checkbox" id="help"> Recibió ayuda</label>
+<button id="start">Iniciar</button><button id="stop" disabled>Finalizar intento</button><button id="download">Descargar evidencia</button>
+<p id="status" role="status">Todavía no hay mediciones.</p><ol id="list"></ol>
+<script>
+const records=[]; let started=null;
+const byId=id=>document.getElementById(id);
+byId('start').onclick=()=>{if(!byId('person').value.trim())return;started=performance.now();byId('start').disabled=true;byId('stop').disabled=false};
+byId('stop').onclick=()=>{if(started===null)return;const id=byId('person').value.trim();if(records.some(r=>r.id===id)){alert('Usa un identificador diferente');return}const seconds=(performance.now()-started)/1000;records.push({id,seconds,success:byId('success').checked,assisted:byId('help').checked,measuredAt:new Date().toISOString()});started=null;byId('start').disabled=false;byId('stop').disabled=true;const li=document.createElement('li');li.textContent=id+' · '+seconds.toFixed(1)+' s';byId('list').append(li);const passed=records.filter(r=>r.success&&!r.assisted&&r.seconds<=180).length;byId('status').textContent=records.length+' participantes. '+passed+' cumplen. '+(records.length===5?(passed>=4?'Criterio cumplido.':'Criterio no cumplido.'):'Faltan participantes.')};
+byId('download').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({criterion:'RNF-014',records,complete:records.length===5,passed:records.length===5&&records.filter(r=>r.success&&!r.assisted&&r.seconds<=180).length>=4},null,2)],{type:'application/json'}));a.download='rnf014-usabilidad.json';a.click();URL.revokeObjectURL(a.href)};
+</script></html>
