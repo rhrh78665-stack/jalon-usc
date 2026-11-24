@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { chromium } from 'playwright'
 import assert from 'node:assert/strict'
 import { once } from 'node:events'
@@ -53,6 +55,29 @@ try {
       const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }))
       assert.ok(dimensions.content <= dimensions.viewport, JSON.stringify({ width, section, dimensions }))
       observations.push({ width, section, ...dimensions })
+      await page.evaluate(await readFile(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8'))
+      const contrast = await page.evaluate(async () => {
+        const result = await axe.run(document, { runOnly: { type: 'rule', values: ['color-contrast'] } })
+        return { violations: result.violations, incomplete: result.incomplete }
+      })
+      assert.deepEqual(contrast.violations, [], 'Contraste ' + section)
+      assert.ok(contrast.incomplete.every(rule => rule.nodes.every(node => node.html.startsWith('<text'))), 'Hay elementos pendientes fuera del SVG')
+      const svgRatios = await page.evaluate(() => {
+        const luminance = value => {
+          const rgb = value.match(/[0-9.]+/g).slice(0, 3).map(Number).map(channel => {
+            const n = channel / 255; return n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4
+          })
+          return rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722
+        }
+        return [...document.querySelectorAll('.workspace-panel:not([hidden]) .stop-map text')].map(text => {
+          const background = /^\d+$/.test(text.textContent.trim()) ? text.parentElement.querySelector('circle') : text.closest('svg').querySelector('rect')
+          const a = luminance(getComputedStyle(text).fill)
+          const b = luminance(getComputedStyle(background).fill)
+          return (Math.max(a, b) + .05) / (Math.min(a, b) + .05)
+        })
+      })
+      assert.ok(svgRatios.every(ratio => ratio >= 4.5), 'Contraste del texto del mapa')
+
     }
     await browser.close()
   }
@@ -64,6 +89,7 @@ try {
   await report('rnf012-keyboard', { criterion: 'RNF-012', actions: ['navegación', 'buscar', 'detalle', 'solicitar'], passed: true })
   await keyboardBrowser.close()
   assert.deepEqual(errors, [])
+  await report('rnf013-contrast', { criterion: 'RNF-013', viewports: [360, 768, 1366], sections: ['buscar', 'publicar', 'reservas'], violations: 0, passed: true })
   await report('rnf011-responsive', { criterion: 'RNF-011', observations, passed: true })
 } finally {
   await Promise.all(browsers.map(browser => browser.close()))
