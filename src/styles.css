@@ -294,3 +294,15 @@ small { color: var(--muted); }
 .install-status summary { cursor: pointer; }
 .install-status p { max-width: 60rem; }
 .install-status button { width: auto; margin: 0; }
+
+
+.app-shell, .workspace-panel, .trip-list > li { min-width: 0; }
+input, select, textarea { max-width: 100%; }
+.workspace-content, .trip-detail, .notice { overflow-wrap: anywhere; }
+fieldset { margin-inline: 0; }
+@media (max-width: 450px) {
+  .workspace-content { padding: .75rem; }
+  .workspace-panel > section { padding: .8rem; }
+  .actions { align-items: stretch; }
+  .actions button { flex-basis: 100%; }
+}
