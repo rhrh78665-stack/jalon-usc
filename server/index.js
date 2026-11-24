@@ -1,5 +1,6 @@
 import { createServer as createHttpsServer } from 'node:https'
 import { readFile } from 'node:fs/promises'
+import { scheduleBackups } from './backups.js'
 import { once } from 'node:events'
 import { resolve } from 'node:path'
 import { createApp } from './app.js'
@@ -20,6 +21,10 @@ export async function startServer(db, port, { cleanup = async () => {}, mail } =
     const server = listener.listen(port, process.env.JALON_HOST || '127.0.0.1')
     await once(server, 'listening')
 
+    const backupDirectory = process.env.JALON_BACKUP_DIR || (process.env.NODE_ENV === 'production' ? 'backups' : null)
+    const backups = backupDirectory ? scheduleBackups(db, resolve(backupDirectory)) : null
+    if (backups) await backups.initial
+
     const expiration = setInterval(() => {
         app.locals.procesarAvisos().catch(() => console.error('No se pudo actualizar la entrega de avisos.'))
         app.locals.expirarReservas().catch(() => console.error('No se pudo actualizar el vencimiento de reservas.'))
@@ -29,6 +34,7 @@ export async function startServer(db, port, { cleanup = async () => {}, mail } =
     for (const signal of ['SIGINT', 'SIGTERM']) {
         process.once(signal, () => {
             clearInterval(expiration)
+            backups?.stop()
             server.close(async () => {
                 await db.close()
                 await cleanup()

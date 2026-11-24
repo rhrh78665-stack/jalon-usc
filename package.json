@@ -14,7 +14,8 @@
     "quality:load": "node quality/load.mjs",
     "quality:browser": "npm run build && node quality/browser.mjs",
     "quality:rebuild": "node quality/rebuild.mjs",
-    "quality:availability": "node quality/availability.mjs"
+    "quality:availability": "node quality/availability.mjs",
+    "quality:recovery": "node quality/recovery.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.17",
