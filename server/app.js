@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { mountIncidents } from './incidentes.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { hashPassword, verifyPassword } from './auth.js'
 import { mountMobility } from './movilidad.js'
@@ -138,6 +139,8 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
   mountProfile(app, db, req => approvedSession(db, req))
   mountRecovery(app, db, mail)
   mountVerification(app, db, mail)
+
+    mountIncidents(app, db, req => approvedSession(db, req))
 
     if (dist) app.use(express.static(dist))
     app.use((error, _req, res, _next) => {

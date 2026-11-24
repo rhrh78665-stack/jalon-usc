@@ -146,6 +146,18 @@ export async function openDatabase(path) {
       CHECK (author_id <> target_id),
       PRIMARY KEY (trip_id, author_id, target_id)
     );
+
+    CREATE TABLE IF NOT EXISTS incidents (
+      id text PRIMARY KEY,
+      trip_id text NOT NULL REFERENCES trips(id),
+      reporter_id text NOT NULL REFERENCES users(id),
+      category text NOT NULL CHECK (category IN ('seguridad', 'conducta', 'vehiculo', 'otro')),
+      description text NOT NULL CHECK (char_length(description) BETWEEN 10 AND 2000),
+      status text NOT NULL DEFAULT 'Recibido' CHECK (status IN ('Recibido', 'Resuelto')),
+      created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS incidents_reporter_date ON incidents(reporter_id, created_at);
+
   `)
     return db
 }

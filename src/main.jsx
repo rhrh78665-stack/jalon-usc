@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import Movilidad from './Movilidad.jsx'
+import Incidentes from './Incidentes.jsx'
 import Vehiculos from './Vehiculos.jsx'
 import BuscarViajes from './BuscarViajes.jsx'
 import Reservas from './Reservas.jsx'
@@ -27,9 +28,9 @@ function Marca() {
 function Panel({ session, busy, signOut }) {
   const [active, setActive] = useState(session.mobility ? 'movilidad' : 'viajes')
   const sections = session.mobility
-    ? [['movilidad', 'Movilidad'], ['perfil', 'Perfil']]
+    ? [['movilidad', 'Movilidad'], ['incidentes', 'Incidentes'], ['perfil', 'Perfil']]
     : [['viajes', 'Buscar viajes'], ['reservas', 'Reservas'],
-       ['publicados', 'Mis viajes'], ['vehiculos', 'Vehículos'], ['perfil', 'Perfil']]
+       ['publicados', 'Mis viajes'], ['vehiculos', 'Vehículos'], ['incidentes', 'Incidentes'], ['perfil', 'Perfil']]
   return (
     <div className="workspace">
       <header className="workspace-header">
@@ -60,7 +61,8 @@ function Panel({ session, busy, signOut }) {
             </div>
           </>
         )}
-        <div id="panel-perfil" className="workspace-panel" hidden={active !== 'perfil'}><Perfil /></div>
+        <div id="panel-incidentes" className="workspace-panel" hidden={active !== 'incidentes'}>{active === 'incidentes' && <Incidentes mobility={Boolean(session.mobility)} />}</div>
+        <div id="panel-perfil" className="workspace-panel" hidden={active !== 'perfil'}>{active === 'perfil' && <Perfil />}</div>
       </div>
     </div>
   )
