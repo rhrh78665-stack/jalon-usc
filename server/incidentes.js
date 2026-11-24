@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 
 const fields = `i.id, i.trip_id AS "tripId", i.category, i.description, i.status,
-  i.created_at AS "createdAt", t.route`
+  i.created_at AS "createdAt", t.route, i.decision, i.resolution, i.resolved_at AS "resolvedAt",
+  reviewer.alias AS reviewer`
 
 export function mountIncidents(app, db, approvedSession) {
   app.get('/api/incidents/trips', async (req, res) => {
@@ -21,10 +22,31 @@ export function mountIncidents(app, db, approvedSession) {
     const user = await approvedSession(req)
     const { rows } = await db.query(
       `SELECT ${fields} FROM incidents i JOIN trips t ON t.id = i.trip_id
+       LEFT JOIN users reviewer ON reviewer.id = i.resolved_by
        WHERE i.reporter_id = $1 OR $2::boolean ORDER BY i.created_at DESC, i.id`,
       [user.id, user.mobility],
     )
     res.json(rows)
+  })
+
+
+  app.post('/api/incidents/:id/resolve', async (req, res) => {
+    const user = await approvedSession(req)
+    requireRule(user.mobility, 'Solo Movilidad puede resolver reportes.', 403)
+    requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    const { decision, resolution } = req.body ?? {}
+    const text = typeof resolution === 'string' ? resolution.trim() : ''
+    requireRule(['atendido', 'descartado'].includes(decision), 'Selecciona la decisión.')
+    requireRule(text.length >= 10 && text.length <= 2000, 'Escribe un motivo de 10 a 2000 caracteres.')
+    const { rows: [saved] } = await db.query(
+      `UPDATE incidents SET status = 'Resuelto', decision = $2, resolution = $3,
+       resolved_by = $4, resolved_at = clock_timestamp()
+       WHERE id = $1 AND status = 'Recibido'
+       RETURNING id, status, decision, resolution, resolved_at AS "resolvedAt"`,
+      [req.params.id, decision, text, user.id],
+    )
+    requireRule(saved, 'El reporte no existe o ya fue resuelto.', 409)
+    res.json(saved)
   })
 
   app.post('/api/incidents', async (req, res) => {

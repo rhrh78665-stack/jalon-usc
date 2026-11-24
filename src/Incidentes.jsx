@@ -18,7 +18,7 @@ export default function Incidentes({ mobility }) {
     ]).then(([reports, available]) => {
       if (!controller.signal.aborted) { setItems(reports); setTrips(available) }
     }).catch(failure => { if (!controller.signal.aborted) setError(failure.message) })
-    return () => controller.abort()
+      return () => controller.abort()
   }, [mobility, revision])
 
   async function report(event) {
@@ -35,6 +35,22 @@ export default function Incidentes({ mobility }) {
       form.reset()
       setRevision(value => value + 1)
       setNotice('Reporte recibido por Movilidad.')
+    } catch (failure) { setError(failure.message) }
+    finally { setBusy(false) }
+  }
+
+
+  async function resolve(event, id) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api('/api/incidents/' + encodeURIComponent(id) + '/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(event.currentTarget))),
+      })
+      setRevision(value => value + 1)
+      setNotice('Decisión registrada.')
     } catch (failure) { setError(failure.message) }
     finally { setBusy(false) }
   }
@@ -70,6 +86,16 @@ export default function Incidentes({ mobility }) {
         <li key={item.id}>
           <strong>{item.route.map(id => nombreParada[id]).join(' → ')}</strong>
           <p>{item.category} · {item.status}</p>
+          {item.resolution && <p>Decisión: {item.decision}. {item.resolution} · {item.reviewer || 'Movilidad'} · {horaLocal.format(new Date(item.resolvedAt))}</p>}
+          {mobility && item.status === 'Recibido' && (
+            <form onSubmit={event => resolve(event, item.id)}>
+              <label>Decisión<select name="decision" required>
+                <option value="atendido">Atendido</option><option value="descartado">Descartado</option>
+              </select></label>
+              <label>Motivo de resolución<textarea name="resolution" minLength={10} maxLength={2000} required /></label>
+              <button disabled={busy}>Resolver reporte</button>
+            </form>
+          )}
           <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.description}</p>
         </li>
       ))}</ul>

@@ -158,6 +158,12 @@ export async function openDatabase(path) {
     );
     CREATE INDEX IF NOT EXISTS incidents_reporter_date ON incidents(reporter_id, created_at);
 
+
+    ALTER TABLE incidents ADD COLUMN IF NOT EXISTS decision text;
+    ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolution text;
+    ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_by text REFERENCES users(id);
+    ALTER TABLE incidents ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
+
   `)
     return db
 }

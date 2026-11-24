@@ -50,4 +50,16 @@ test('RF-031 a RF-039: comunidad y acceso móvil', async t => {
     assert.equal((await request('/api/incidents', { method: 'POST', body: { ...body, description: '' } })).status, 400)
   })
 
+await t.test('CP-F032 solo Movilidad resuelve una vez y el remitente ve la decisión', async () => {
+    const body = { decision: 'atendido', resolution: 'Se revisó el incidente y se registró la decisión.' }
+    const path = '/api/incidents/' + incident + '/resolve'
+    assert.equal((await request(path, { method: 'POST', body })).status, 403)
+    const results = await Promise.all([1, 2].map(() => request(path, { user: 'demo-mobility', method: 'POST', body })))
+    assert.deepEqual(results.map(r => r.status).sort(), [200, 409])
+    const report = (await request('/api/incidents')).data[0]
+    assert.equal(report.status, 'Resuelto')
+    assert.equal(report.resolution, body.resolution)
+    assert.equal(report.reviewer, 'Movilidad Demo')
+  })
+
 })
