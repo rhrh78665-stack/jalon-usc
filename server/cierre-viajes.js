@@ -20,7 +20,7 @@ async function confirmadas(tx, tripId) {
   return rows
 }
 
-function aplicarAsistencia(reservas, marcas) {
+function aplicarAsistencia(reservas, marcas, complete = true) {
   requireRule(Array.isArray(marcas), 'Envía las marcas de asistencia.')
   const porReserva = new Map()
   const ids = new Set(reservas.map(r => r.id))
@@ -31,7 +31,7 @@ function aplicarAsistencia(reservas, marcas) {
     porReserva.set(marca.id, marca.attendance)
   }
   const resultado = reservas.map(r => ({ ...r, attendance: porReserva.get(r.id) ?? r.attendance }))
-  requireRule(resultado.every(r => r.attendance), 'Registra la asistencia de cada reserva confirmada.', 409)
+  requireRule(!complete || resultado.every(r => r.attendance), 'Registra la asistencia de cada reserva confirmada.', 409)
   return resultado
 }
 
@@ -46,6 +46,25 @@ export function mountTripClosing(app, db, approvedSession, informar) {
          WHERE r.trip_id = $1 AND r.status = 'Confirmada' ORDER BY r.id`, [trip.id],
       )
       return { status: trip.status, liquidation: trip.liquidation, reservas }
+    })
+    res.json(result)
+  })
+
+
+  app.patch('/api/trips/:id/attendance', async (req, res) => {
+    const { id } = await approvedSession(req)
+    requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
+    const body = req.body ?? {}
+    requireRule(!Array.isArray(body) && Object.keys(body).every(key => key === 'asistencia') &&
+      Array.isArray(body.asistencia) && body.asistencia.length > 0, 'Envía las marcas de asistencia.')
+    const result = await db.transaction(async tx => {
+      const trip = await cargarPropio(tx, req.params.id, id)
+      requireRule(trip.status === 'EnCurso', 'Solo puedes registrar asistencia durante el viaje.', 409)
+      const reservations = aplicarAsistencia(await confirmadas(tx, trip.id), body.asistencia, false)
+      for (const mark of body.asistencia) {
+        await tx.query('UPDATE reservations SET attendance = $2 WHERE id = $1', [mark.id, mark.attendance])
+      }
+      return { id: trip.id, status: trip.status, reservas: reservations }
     })
     res.json(result)
   })

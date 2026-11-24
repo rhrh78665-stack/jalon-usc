@@ -124,4 +124,22 @@ await t.test('CP-F035 radio inclusivo con Haversine y acceso autenticado', async
     assert.equal((await request('/api/stops/nearby?latitude=91&longitude=0&radius=800')).status, 400)
   })
 
+await t.test('CP-F036 persiste asistencia antes del cierre y bloquea reservas o actores inválidos', async () => {
+    const path = '/api/trips/demo-close/attendance'
+    const body = { asistencia: [{ id: 'demo-b-close', attendance: 'Abordo' }] }
+    assert.equal((await request(path, { user: 'demo-driver', method: 'PATCH', body })).status, 409)
+    assert.equal((await request('/api/trips/demo-close/start', { user: 'demo-driver', method: 'POST' })).status, 200)
+    assert.equal((await request(path, { user: 'outsider', method: 'PATCH', body })).status, 403)
+    assert.equal((await request(path, { user: 'demo-driver', method: 'PATCH', body: {
+      asistencia: [{ id: 'demo-b-start', attendance: 'Abordo' }],
+    } })).status, 400)
+    assert.equal((await request(path, { user: 'demo-driver', method: 'PATCH', body })).status, 200)
+    const saved = await request('/api/trips/demo-close/cierre', { user: 'demo-driver' })
+    assert.equal(saved.data.reservas[0].attendance, 'Abordo')
+    assert.equal((await request('/api/trips/demo-close/finish', {
+      user: 'demo-driver', method: 'POST', body: { asistencia: [] },
+    })).status, 200)
+    assert.equal((await request(path, { user: 'demo-driver', method: 'PATCH', body })).status, 409)
+  })
+
 })

@@ -5,6 +5,7 @@ export default function CierreViaje({ trip }) {
   const [cierre, setCierre] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
   const visible = ['EnCurso', 'Completado'].includes(trip.status)
   const url = `/api/trips/${encodeURIComponent(trip.id)}`
 
@@ -20,11 +21,13 @@ export default function CierreViaje({ trip }) {
   async function cambiar(action, asistencia) {
     setBusy(true)
     setError('')
+    setNotice('')
     try {
       await api(url + '/' + action, {
-        method: 'POST',
+        method: action === 'attendance' ? 'PATCH' : 'POST',
         ...(asistencia && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ asistencia }) }),
       })
+      if (action === 'attendance') setNotice('Asistencia guardada. Puedes continuar y liquidar al finalizar.')
       window.dispatchEvent(new Event('jalon-trips-update'))
     } catch (failure) {
       setError(failure.message)
@@ -36,6 +39,7 @@ export default function CierreViaje({ trip }) {
   return (
     <div>
       {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
       {['Programado', 'Lleno'].includes(trip.status) && (
         <button type="button" disabled={busy} onClick={() => cambiar('start')}>Iniciar viaje</button>
       )}
@@ -43,7 +47,8 @@ export default function CierreViaje({ trip }) {
         <form onSubmit={event => {
           event.preventDefault()
           const data = new FormData(event.currentTarget)
-          cambiar('finish', cierre.reservas.map(r => ({ id: r.id, attendance: data.get(r.id) })))
+          const action = event.nativeEvent.submitter?.value === 'attendance' ? 'attendance' : 'finish'
+          cambiar(action, cierre.reservas.map(r => ({ id: r.id, attendance: data.get(r.id) })))
         }}>
           {cierre.reservas.map(r => (
             <label key={r.id}>
@@ -55,7 +60,8 @@ export default function CierreViaje({ trip }) {
               </select>
             </label>
           ))}
-          <button disabled={busy}>Finalizar y liquidar</button>
+          <button name="action" value="attendance" className="secondary" disabled={busy}>Guardar asistencia</button>
+          <button name="action" value="finish" disabled={busy}>Finalizar y liquidar</button>
         </form>
       )}
       {trip.status === 'Completado' && cierre?.liquidation && (
