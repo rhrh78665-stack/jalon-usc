@@ -109,6 +109,19 @@ await t.test('RNF-003 producción exige HTTPS incluso con cabeceras falsificadas
       assert.equal(result.statusCode, 200)
       assert.match(result.headers['strict-transport-security'], /max-age=/)
       assert.equal(result.headers['x-content-type-options'], 'nosniff')
+      const login = await new Promise((resolve, reject) => {
+        const req = httpsRequest({ host: '127.0.0.1', port: secure.address().port, path: '/api/login',
+          method: 'POST', rejectUnauthorized: false, headers: { 'Content-Type': 'application/json' },
+        }, response => { response.resume(); response.on('end', () => resolve(response)) })
+        req.on('error', reject)
+        req.end(JSON.stringify({ email: 'pasajero.demo@usc.edu.co', password: 'JalonDemo-2026!' }))
+      })
+      assert.equal(login.statusCode, 200)
+      const cookie = login.headers['set-cookie'][0]
+      assert.match(cookie, /Secure/)
+      assert.match(cookie, /HttpOnly/)
+      assert.match(cookie, /SameSite=Lax/)
+
     } finally { secure.closeAllConnections(); await new Promise(resolve => secure.close(resolve)) }
   })
 
@@ -149,6 +162,24 @@ await t.test('RNF-005 matriz de escrituras protegidas sin sesión, rol o propied
       assert.ok([403, 404].includes(denied.status), path + ': ' + denied.status)
     }
     assert.equal(await snapshot(), before)
+  })
+
+await t.test('RNF-006 cookies de sesión y revocación tras cierre', async () => {
+    const login = await request('/api/login', { user: null, method: 'POST', body: {
+      email: 'invitado.demo@usc.edu.co', password: 'JalonDemo-2026!',
+    } })
+    assert.equal(login.status, 200)
+    const cookie = login.headers.get('set-cookie')
+    assert.match(cookie, /HttpOnly/i)
+    assert.match(cookie, /SameSite=Lax/i)
+    assert.match(cookie, /Path=\//)
+    const token = cookie.split(';')[0]
+    const closed = await fetch(base + '/api/logout', { method: 'POST', headers: {
+      Cookie: token, 'Content-Type': 'application/json',
+    }, body: '{}' })
+    assert.equal(closed.status, 204)
+    assert.match(closed.headers.get('set-cookie'), /Expires=Thu, 01 Jan 1970/i)
+    assert.equal((await fetch(base + '/api/session', { headers: { Cookie: token } })).status, 401)
   })
 
 })
