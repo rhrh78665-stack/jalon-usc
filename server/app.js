@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { mountStops } from './paradas.js'
 import { notificationWorker, mountNotifications } from './avisos.js'
 import { mountIncidents } from './incidentes.js'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -142,6 +143,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
   mountRecovery(app, db, mail)
   mountVerification(app, db, mail)
 
+    mountStops(app, req => approvedSession(db, req))
     mountIncidents(app, db, req => approvedSession(db, req))
     mountNotifications(app, db, req => approvedSession(db, req))
 

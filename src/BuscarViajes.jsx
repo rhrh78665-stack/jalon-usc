@@ -1,3 +1,4 @@
+import ParadasCercanas from './ParadasCercanas.jsx'
 import React, { useEffect, useRef, useState } from 'react'
 import { paradas } from '../shared/paradas.js'
 import Itinerario, { api, nombreParada, horaLocal, pesos, fechaFormulario } from './Itinerario.jsx'
@@ -104,6 +105,7 @@ export default function BuscarViajes() {
         <h2 id="search-heading">Buscar viajes</h2>
         <p>Encuentra un trayecto compartido hacia o desde el campus.</p>
       </header>
+      <ParadasCercanas onSelect={origin => setFilters(current => ({ ...current, origin, page: '1' }))} />
       <form className="search-form" onSubmit={event => {
         event.preventDefault()
         buscar(filters)

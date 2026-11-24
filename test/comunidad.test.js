@@ -4,6 +4,7 @@ import { once } from 'node:events'
 import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
+import { nearbyStops } from '../shared/proximidad.js'
 import { mapPoints } from '../shared/mapa.js'
 import { paradas } from '../shared/paradas.js'
 import { readFile } from 'node:fs/promises'
@@ -104,6 +105,23 @@ await t.test('CP-F034 el catálogo conserva coordenadas y el esquema mantiene un
     assert.ok(ordered.every(stop => stop.x >= 80 && stop.x <= 560 && stop.y >= 60 && stop.y <= 220))
     assert.deepEqual(mapPoints(['unknown', 'usc']), [])
     assert.equal(mapPoints(['melendez', 'usc']).length, 2)
+  })
+
+await t.test('CP-F035 radio inclusivo con Haversine y acceso autenticado', async () => {
+    const latitude = meters => meters / 6371000 * 180 / Math.PI
+    const stops = [
+      { id: 'edge', latitude: latitude(800), longitude: 0 },
+      { id: 'outside', latitude: latitude(801), longitude: 0 },
+    ]
+    assert.deepEqual(nearbyStops(stops, { latitude: 0, longitude: 0 }, 800).map(s => s.id), ['edge'])
+    const query = new URLSearchParams({ latitude: paradas[0].latitude, longitude: paradas[0].longitude, radius: '800' })
+    const result = await request('/api/stops/nearby?' + query)
+    assert.equal(result.status, 200)
+    assert.equal(result.data[0].id, 'melendez')
+    assert.ok(result.data.every(stop => stop.distanceMeters <= 800 + 1e-7))
+    assert.equal((await request('/api/stops/nearby?' + query, { user: null })).status, 401)
+    assert.equal((await request('/api/stops/nearby?latitude=&longitude=0&radius=800')).status, 400)
+    assert.equal((await request('/api/stops/nearby?latitude=91&longitude=0&radius=800')).status, 400)
   })
 
 })

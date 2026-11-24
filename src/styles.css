@@ -278,3 +278,9 @@ small { color: var(--muted); }
 .stop-map { margin: 1rem 0; max-width: 48rem; }
 .stop-map svg { display: block; width: 100%; height: auto; }
 .stop-map figcaption { margin-top: .35rem; color: var(--muted); font-size: .83rem; }
+
+.nearby-stops { margin: 1rem 0 1.4rem; border: 1px solid var(--line); border-radius: .7rem; padding: 1rem; }
+.nearby-stops summary { cursor: pointer; font-weight: 650; }
+.coordinate-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .75rem; }
+.nearby-stops li { margin: .8rem 0; }
+.nearby-stops li button { width: auto; margin-left: .6rem; }
