@@ -112,4 +112,26 @@ await t.test('RNF-003 producción exige HTTPS incluso con cabeceras falsificadas
     } finally { secure.closeAllConnections(); await new Promise(resolve => secure.close(resolve)) }
   })
 
+await t.test('RNF-004 Argon2id con sales individuales y verificación de claves históricas', async () => {
+    const password = 'Prueba-Hash-Calidad-2026'
+    const first = await hashPassword(password)
+    const second = await hashPassword(password)
+    assert.notEqual(first, second)
+    const [salt, digest] = first.split(':')
+    const expected = await promisify(argon2)('argon2id', {
+      message: Buffer.from(password), nonce: Buffer.from(salt, 'hex'), parallelism: 1,
+      tagLength: 32, memory: 19456, passes: 2,
+    })
+    assert.equal(expected.toString('hex'), digest)
+    assert.equal(await verifyPassword(password, first), true)
+    assert.equal(await verifyPassword(password + 'x', first), false)
+    assert.equal(await verifyPassword('short', first), false)
+    assert.equal(await verifyPassword(null, first), false)
+    assert.equal(await verifyPassword(password, null), false)
+    assert.equal(await verifyPassword(password, 'corrupto'), false)
+    await assert.rejects(hashPassword('corta'))
+    await assert.rejects(hashPassword('x'.repeat(129)))
+    await assert.rejects(hashPassword(null))
+  })
+
 })
