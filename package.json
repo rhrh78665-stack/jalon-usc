@@ -10,7 +10,8 @@
     "build": "vite build",
     "start": "node server/index.js",
     "test": "node --test",
-    "demo": "vite build && node server/demo.js"
+    "demo": "vite build && node server/demo.js",
+    "quality:load": "node quality/load.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.17",

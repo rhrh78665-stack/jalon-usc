@@ -219,6 +219,20 @@ export async function openDatabase(path) {
     CREATE TRIGGER trip_notification AFTER UPDATE OF status ON trips
       FOR EACH ROW EXECUTE FUNCTION queue_trip_notice();
 
+
+    CREATE OR REPLACE FUNCTION invalidate_trip_search() RETURNS trigger AS $$
+    BEGIN
+      PERFORM pg_notify('jalon_trip_search', 'changed');
+      RETURN NULL;
+    END;
+    $$ LANGUAGE plpgsql;
+    DROP TRIGGER IF EXISTS invalidate_trip_search ON trips;
+    CREATE TRIGGER invalidate_trip_search AFTER INSERT OR UPDATE OR DELETE ON trips
+      FOR EACH STATEMENT EXECUTE FUNCTION invalidate_trip_search();
+    DROP TRIGGER IF EXISTS invalidate_reservation_search ON reservations;
+    CREATE TRIGGER invalidate_reservation_search AFTER INSERT OR UPDATE OR DELETE ON reservations
+      FOR EACH STATEMENT EXECUTE FUNCTION invalidate_trip_search();
+
   `)
     return db
 }

@@ -1,3 +1,4 @@
+import { tripSearch } from './busqueda.js'
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { tarifaVigente, mountTariffs } from './tarifas.js'
@@ -74,6 +75,7 @@ function enteroConsulta(value, fallback, max) {
 
 export function mountTrips(app, db, approvedSession) {
   const listeners = new Map()
+  const search = tripSearch(db)
 
   // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
   async function informar(userIds, event, data) {
@@ -136,29 +138,7 @@ export function mountTrips(app, db, approvedSession) {
     const target = hasTime ? new Date(horaBogota(date + 'T' + time)).getTime() : null
     const page = enteroConsulta(req.query.page, 1, 1000000)
     const pageSize = enteroConsulta(req.query.pageSize, 10, 50)
-    const result = await db.transaction(async tx => {
-      const { rows: trips } = await tx.query(
-        `SELECT ${campos} FROM trips WHERE status IN ('Programado', 'Lleno')
-         AND depart_at > clock_timestamp() AND jsonb_array_length(itinerary) >= 2 AND driver_id <> $1`, [id],
-      )
-      const { rows: bookings } = await tx.query("SELECT * FROM reservations WHERE status = 'Confirmada'")
-      const matches = []
-      for (const trip of trips) {
-        if (trip.route.indexOf(origin) < 0 || trip.route.indexOf(destination) <= trip.route.indexOf(origin)) continue
-        const quote = cotizar(trip, bookings.filter(booking => booking.trip_id === trip.id), origin, destination)
-        if (quote.availableSeats < 1) continue
-        if (!target && horaLocal(quote.boardAt).slice(0, 10) !== date) continue
-        const difference = diferenciaHorario(trip, quote, target)
-        if (difference === null) continue
-        matches.push({ trip, quote, difference })
-      }
-      matches.sort((a, b) => a.difference - b.difference ||
-        new Date(a.trip.departAt).getTime() - new Date(b.trip.departAt).getTime() || a.trip.id.localeCompare(b.trip.id))
-      return {
-        page, pageSize, total: matches.length,
-        items: matches.slice((page - 1) * pageSize, page * pageSize).map(({ trip, quote }) => vistaPublica(trip, quote)),
-      }
-    })
+    const result = await search({ userId: id, origin, destination, date, target, page, pageSize })
     res.json(result)
   })
 
