@@ -212,4 +212,12 @@ await t.test('RNF-008 búsqueda y detalle no revelan datos personales', async ()
     assert.doesNotMatch(JSON.stringify(search.data), /@usc\.edu\.co/)
   })
 
+await t.test('RNF-009 demostración aislada con identidades sintéticas', async () => {
+    const users = (await db.query('SELECT id, email FROM users')).rows
+    assert.ok(users.length >= 4)
+    assert.ok(users.every(user => user.id.startsWith('demo-') && user.email.endsWith('.demo@usc.edu.co')))
+    const plates = (await db.query('SELECT plate FROM vehicles')).rows
+    assert.ok(plates.every(row => /^DEM[0-9]{3}$/.test(row.plate)))
+  })
+
 })
