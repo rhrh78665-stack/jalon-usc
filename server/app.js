@@ -71,6 +71,11 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
     })
     app.use('/api', express.json({ limit: '8kb' }))
 
+    app.get('/api/health', async (_req, res) => {
+        try { await db.query('SELECT 1'); res.json({ status: 'ok', database: 'ok' }) }
+        catch { res.status(503).json({ status: 'unavailable' }) }
+    })
+
     app.post('/api/register', async (req, res) => {
         requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
         requireRule(
