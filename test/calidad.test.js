@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { logRequestError } from '../server/registro.js'
 import assert from 'node:assert/strict'
 import { createServer as httpsServer, request as httpsRequest } from 'node:https'
 import { readFile } from 'node:fs/promises'
@@ -218,6 +219,19 @@ await t.test('RNF-009 demostración aislada con identidades sintéticas', async 
     assert.ok(users.every(user => user.id.startsWith('demo-') && user.email.endsWith('.demo@usc.edu.co')))
     const plates = (await db.query('SELECT plate FROM vehicles')).rows
     assert.ok(plates.every(row => /^DEM[0-9]{3}$/.test(row.plate)))
+  })
+
+await t.test('RNF-010 registro de errores sin claves, cookies ni texto de incidentes', () => {
+    const saved = console.error
+    const messages = []
+    console.error = value => messages.push(value)
+    try {
+      logRequestError({ code: '23505', message: 'clave-privada', cookie: 'jalon_session=secreto', incident: 'texto privado' })
+      logRequestError({ code: 'texto privado' })
+    } finally { console.error = saved }
+    assert.equal(JSON.parse(messages[0]).code, '23505')
+    assert.equal(JSON.parse(messages[1]).code, 'INTERNAL')
+    assert.doesNotMatch(messages.join(''), /clave-privada|secreto|texto privado|cookie|incident/)
   })
 
 })

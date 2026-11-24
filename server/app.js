@@ -1,5 +1,6 @@
 import { configurarCorreo } from './correo.js'
 import express from 'express'
+import { logRequestError } from './registro.js'
 import { accountBlocked, recordAttempt } from './intentos.js'
 import { configureTransport } from './transporte.js'
 import { mountReputation } from './reputacion.js'
@@ -168,7 +169,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
         if (error.type === 'entity.too.large') {
             return res.status(413).json({ message: 'La solicitud supera el tamaño permitido.' })
         }
-        console.error('Error de solicitud', error.code ?? error.name)
+        logRequestError(error)
         res.status(500).json({ message: 'No se pudo procesar la solicitud.' })
     })
 

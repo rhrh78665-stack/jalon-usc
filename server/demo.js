@@ -91,7 +91,6 @@ if (import.meta.main) {
     console.log('Jalón USC · demostración local: ' + url)
     console.log('Fecha de los viajes futuros (Cali): ' + date)
     console.log('Cuentas: ' + accounts.map(([, email]) => email).join(', '))
-    console.log('Contraseña de demostración: ' + password)
   } catch (error) {
     await db.close()
     await cleanup()
