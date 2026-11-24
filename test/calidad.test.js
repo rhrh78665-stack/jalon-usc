@@ -134,4 +134,21 @@ await t.test('RNF-004 Argon2id con sales individuales y verificación de claves 
     await assert.rejects(hashPassword(null))
   })
 
+await t.test('RNF-005 matriz de escrituras protegidas sin sesión, rol o propiedad', async () => {
+    const cases = [
+      ['/api/vehicles', { plate: 'XXX987', seats: 3, efficiency: 40 }],
+      ['/api/movilidad/solicitudes/inexistente', { decision: 'approved', code: '20260001', role: 'estudiante' }],
+      ['/api/trips/demo-search/cancel', { reason: 'Cambio de horario para la prueba' }],
+      ['/api/incidents/inexistente/resolve', { resolution: 'Resuelto sin permiso' }],
+    ]
+    const snapshot = async () => JSON.stringify((await db.query("SELECT id, status, capacity FROM trips ORDER BY id")).rows)
+    const before = await snapshot()
+    for (const [path, body] of cases) {
+      assert.equal((await request(path, { user: null, method: 'POST', body })).status, 401)
+      const denied = await request(path, { user: 'demo-passenger', method: 'POST', body })
+      assert.ok([403, 404].includes(denied.status), path + ': ' + denied.status)
+    }
+    assert.equal(await snapshot(), before)
+  })
+
 })
