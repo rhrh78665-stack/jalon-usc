@@ -234,4 +234,18 @@ await t.test('RNF-010 registro de errores sin claves, cookies ni texto de incide
     assert.doesNotMatch(messages.join(''), /clave-privada|secreto|texto privado|cookie|incident/)
   })
 
+await t.test('RNF-023 veinte cierres simultáneos guardan una liquidación y una advertencia por ausencia', async () => {
+    const start = await request('/api/trips/demo-close/start', { user: 'demo-driver', method: 'POST', body: {} })
+    assert.equal(start.status, 200)
+    const options = { user: 'demo-driver', method: 'POST', body: { asistencia: [{ id: 'demo-b-close', attendance: 'Ausente' }] } }
+    const responses = await Promise.all(Array.from({ length: 20 }, () => request('/api/trips/demo-close/finish', options)))
+    assert.ok(responses.every(result => result.status === 200), JSON.stringify(responses))
+    for (const response of responses) assert.deepEqual(response.data, responses[0].data)
+    const stored = (await db.query("SELECT liquidation, status FROM trips WHERE id = 'demo-close'")).rows[0]
+    assert.equal(stored.status, 'Completado')
+    assert.deepEqual(stored.liquidation, responses[0].data.liquidation)
+    const warnings = (await db.query("SELECT count(*)::int AS n FROM booking_warnings WHERE reservation_id = 'demo-b-close' AND reason = 'ausencia'")).rows[0]
+    assert.equal(warnings.n, 1)
+  })
+
 })
