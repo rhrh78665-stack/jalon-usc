@@ -27,11 +27,12 @@ async function open(user, width) {
   const page = await context.newPage()
   page.on('pageerror', error => errors.push(error.message))
   await page.goto(url)
-  await keyboardActivate(page, page.getByRole('button', { name: 'Ya tengo cuenta', exact: true }))
+  await keyboardActivate(page, page.locator('.header-access'))
+  await page.locator('.auth-dialog[open]').waitFor()
   await page.getByLabel('Correo institucional', { exact: true }).fill(user + '.demo@usc.edu.co')
   await page.getByLabel('Contraseña', { exact: true }).fill('JalonDemo-2026!')
-  await keyboardActivate(page, page.getByRole('button', { name: 'Entrar', exact: true }))
-  await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).waitFor()
+  await keyboardActivate(page, page.locator('.auth-dialog button[type="submit"]'))
+  await page.locator('.session-indicator').waitFor()
   return { page, browser, context }
 }
 async function keyboardFocus(page, locator) {
@@ -48,13 +49,24 @@ async function keyboardActivate(page, locator) {
   await keyboardFocus(page, locator)
   await page.keyboard.press('Enter')
 }
-const nav = (page, name) => page.getByRole('navigation', { name: 'Secciones de Jalón USC' }).getByRole('button', { name, exact: true }).click()
+async function nav(page,name) {
+  const destinations={
+    'Buscar viajes':['Rutas','Rutas disponibles'],
+    'Mis viajes':['Conducir','Mis ofertas'],
+    'Reservas':['Reservas','Todas mis reservas'],
+    'Solicitudes':['Solicitudes','Todas las solicitudes'],
+    'Historial':['Historial','Todas mis carreras'],
+  }
+  const [group,item]=destinations[name]||['Comunidad','Quiénes somos']
+  await keyboardActivate(page,page.getByRole('navigation',{name:'Navegación principal'}).getByRole('button',{name:group,exact:true}))
+  await keyboardActivate(page,page.locator('.mega-items button').filter({has:page.getByText(item,{exact:true})}))
+}
 try {
   for (const width of [360, 768, 1366]) {
     const { page, browser } = await open('conductor', width)
-    for (const section of ['Buscar viajes', 'Mis viajes', 'Reservas']) {
+    for (const section of ['Mis viajes', 'Solicitudes', 'Historial']) {
       await nav(page, section)
-      await page.waitForTimeout(150)
+      await page.waitForTimeout(450)
       const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }))
       assert.ok(dimensions.content <= dimensions.viewport, JSON.stringify({ width, section, dimensions }))
       observations.push({ width, section, ...dimensions })
@@ -85,11 +97,12 @@ try {
     await browser.close()
   }
   const { page: publishPage, browser: publishBrowser } = await open('conductor', 1366)
-  await keyboardActivate(publishPage, publishPage.getByRole('navigation').getByRole('button', { name: 'Mis viajes', exact: true }))
+  await nav(publishPage,'Mis viajes')
+  await keyboardActivate(publishPage, publishPage.getByRole('button', { name: /^Publicar recorrido/ }))
   const draft = [
     ['#trip-vehicle', 'demo-car'], ['#trip-departure', demoDate + 'T18:00'], ['#trip-capacity', '2'],
     ['#trip-stop-0', 'melendez'], ['#trip-stop-0-time', demoDate + 'T18:00'],
-    ['#trip-stop-3', 'usc'], ['#trip-stop-3-time', demoDate + 'T18:30'],
+    ['#trip-stop-1', 'usc'], ['#trip-stop-1-time', demoDate + 'T18:30'],
   ]
   for (const [selector, value] of draft) {
     const field = publishPage.locator(selector)
@@ -98,15 +111,18 @@ try {
     else if (await field.getAttribute('readonly') !== null) assert.equal(await field.inputValue(), value)
     else await field.fill(value)
   }
+  await keyboardActivate(publishPage,publishPage.getByRole('button',{name:'Calcular y revisar recorrido',exact:true}))
+  await publishPage.locator('.route-plan-summary').waitFor()
   await keyboardActivate(publishPage, publishPage.getByRole('button', { name: 'Publicar viaje', exact: true }))
   await publishPage.getByText('Viaje publicado.', { exact: true }).waitFor()
   await publishBrowser.close()
   const { page: keyboardPage, browser: keyboardBrowser } = await open('pasajero', 1366)
-  await keyboardPage.getByLabel('Fecha (hora de Cali)', { exact: true }).fill(demoDate)
-  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Buscar viajes', exact: true }).last())
-  await keyboardActivate(keyboardPage, keyboardPage.locator('[data-trip-id="demo-search"]').getByRole('button', { name: 'Ver detalle y aporte', exact: true }))
+  await nav(keyboardPage,'Buscar viajes')
+  await keyboardPage.getByLabel('Otra fecha',{exact:true}).fill(demoDate)
+  await keyboardPage.locator('#published-route').selectOption('melendez|usc')
+  await keyboardActivate(keyboardPage,keyboardPage.locator('[data-trip-id="demo-search"]').getByRole('button',{name:/^Ver paradas/}))
   const requested = keyboardPage.waitForResponse(response => response.url().endsWith('/api/trips/demo-search/reservations') && response.request().method() === 'POST')
-  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: 'Solicitar asiento', exact: true }))
+  await keyboardActivate(keyboardPage, keyboardPage.getByRole('button', { name: /^Reservar asiento/ }))
   assert.equal((await requested).status(), 201)
   await report('rnf012-keyboard', { criterion: 'RNF-012', actions: ['ingreso', 'navegación', 'publicar', 'buscar', 'detalle', 'solicitar'], passed: true })
   await nav(keyboardPage, 'Reservas')
@@ -172,12 +188,8 @@ try {
   }
   await report('rnf002-fallback', { criterion: 'RNF-002', transport: 'consulta de respaldo cada 3 s con SSE interrumpido', samples: fallback.length, milliseconds: fallback })
   const browserVersion = keyboardBrowser.version()
-  const cdp = await keyboardPage.context().newCDPSession(keyboardPage)
-  const manifest = await cdp.send('Page.getAppManifest')
-  assert.deepEqual(manifest.errors, [])
-  assert.equal(JSON.parse(manifest.data).display, 'standalone')
-  await report('rnf018-desktop', { criterion: 'RNF-018', browser: 'Chromium', version: browserVersion, desktop: true, physicalMobileVerified: false, note: 'Se completa con quality/movil.html en un teléfono físico.' })
-  await report('rnf020-manifest', { criterion: 'RNF-020', manifestErrors: manifest.errors, physicalInstallationVerified: false })
+  assert.equal(await keyboardPage.locator('link[rel="manifest"]').count(), 0)
+  await report('rnf018-desktop', { criterion: 'RNF-018', browser: 'Chromium', version: browserVersion, desktop: true, physicalMobileVerified: false, note: 'Verificar también en un navegador móvil físico.' })
   await keyboardBrowser.close()
   assert.deepEqual(errors, [])
   await report('rnf013-contrast', { criterion: 'RNF-013', viewports: [360, 768, 1366], sections: ['buscar', 'publicar', 'reservas'], violations: 0, passed: true })

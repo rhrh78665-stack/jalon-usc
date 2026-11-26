@@ -3,7 +3,9 @@ import React, { useEffect, useState } from 'react'
 
 const base = '/api/movilidad'
 
-export default function Movilidad() {
+export default function Movilidad({initialTab='solicitudes',navigationId}) {
+    const [tab,setTab]=useState(initialTab || 'solicitudes')
+    useEffect(()=>setTab(initialTab || 'solicitudes'),[initialTab,navigationId])
     const [requests, setRequests] = useState(null)
     const [drivers, setDrivers] = useState(null)
     const [revision, setRevision] = useState(0)
@@ -76,7 +78,9 @@ export default function Movilidad() {
 
     return (
         <section aria-label="Movilidad">
-            <Tarifas />
+            <header className="section-heading"><span className="card-eyebrow">Coordinación de movilidad</span><h2>Tu comunidad,<br/>en buenas manos.</h2></header>
+            <div className="section-subtabs" aria-label="Administración">{[['solicitudes','Vinculaciones'],['conductores','Conductores'],['tarifas','Tarifas']].map(([id,label])=><button type="button" key={id} aria-pressed={tab===id} onClick={()=>setTab(id)}>{label}</button>)}</div>
+            <div hidden={tab!=='tarifas'}><Tarifas /></div><div hidden={tab!=='solicitudes'}>
             <h2>Solicitudes de vinculación</h2>
 
             {requests === null && !message && <p>Cargando solicitudes…</p>}
@@ -114,7 +118,7 @@ export default function Movilidad() {
                 </form>
             ))}
 
-            <h2>Habilitación de conductores</h2>
+            </div><div hidden={tab!=='conductores'}><h2>Habilitación de conductores</h2>
 
             {drivers === null && !message && <p>Cargando miembros aprobados…</p>}
             {drivers?.length === 0 && <p>No hay miembros aprobados.</p>}
@@ -138,7 +142,7 @@ export default function Movilidad() {
                 </form>
             ))}
 
-            {message && (
+            </div>{message && (
                 <p
                     className={message.error ? 'notice error' : 'notice'}
                     role={message.error ? 'alert' : 'status'}

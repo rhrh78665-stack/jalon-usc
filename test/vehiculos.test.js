@@ -75,7 +75,7 @@ test('CP-F006 Registrar vehículo', async t => {
     assert.deepEqual(attempts.map(response => response.status).sort(), [201, 409])
     const vehicle = await attempts.find(response => response.status === 201).json()
     assert.ok(vehicle.id)
-    assert.deepEqual(vehicle, { id: vehicle.id, plate: 'ABC123', seats: 4, efficiency: 42.5 })
+    assert.deepEqual(vehicle, { id: vehicle.id, plate: 'ABC123', seats: 4, efficiency: 42.5, brand: '', model: '', color: '', hasPhoto: false, photoReference: false })
 
     assert.equal((await request(path, b, valid)).status, 409)
     assert.deepEqual(await (await request(path, a)).json(), [vehicle])

@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runInNewContext } from 'node:vm'
 import { once } from 'node:events'
 import { createHash } from 'node:crypto'
 import { createApp } from '../server/app.js'
@@ -11,7 +10,7 @@ import { nearbyStops } from '../shared/proximidad.js'
 import { mapPoints } from '../shared/mapa.js'
 import { paradas } from '../shared/paradas.js'
 import { readFile } from 'node:fs/promises'
-import { seedDemo } from '../server/demo.js'
+import { seedDemo } from '../test-support/demo.js'
 
 test('RF-031 a RF-039: comunidad y acceso móvil', async t => {
   const db = await openDatabase()
@@ -67,7 +66,7 @@ await t.test('CP-F032 solo Movilidad resuelve una vez y el remitente ve la decis
     const report = (await request('/api/incidents')).data[0]
     assert.equal(report.status, 'Resuelto')
     assert.equal(report.resolution, body.resolution)
-    assert.equal(report.reviewer, 'Movilidad Demo')
+    assert.equal(report.reviewer, 'Coordinación de Movilidad')
   })
 
 await t.test('CP-F033 guarda el evento con la transacción y entrega una vez con reintentos', async () => {
@@ -193,35 +192,17 @@ await t.test('CP-F038 promedio con un decimal, cantidad, perfil sin notas y priv
     assert.deepEqual(tripSummary, { count: 2, average: 4.5 })
   })
 
-await t.test('CP-F039 manifest e iconos instalables y API sin caché ni escrituras offline', async () => {
-    const manifest = JSON.parse(await readFile(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'))
-    assert.equal(manifest.display, 'standalone')
-    assert.equal(manifest.start_url, '/')
-    for (const size of [192, 512]) {
-      const image = await readFile(new URL('../public/icon-' + size + '.png', import.meta.url))
-      assert.equal(image.readUInt32BE(16), size)
-      assert.equal(image.readUInt32BE(20), size)
-      assert.ok(manifest.icons.some(icon => icon.sizes === size + 'x' + size))
-    }
-    const listeners = {}
-    let cacheAccesses = 0
+await t.test('sitio web sin manifest, instalación ni caché de aplicación', async () => {
+    const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
+    const main = await readFile(new URL('../src/main.jsx', import.meta.url), 'utf8')
+    assert.doesNotMatch(html, /rel="manifest"|apple-mobile-web-app-capable|apple-touch-icon/)
+    assert.doesNotMatch(main, /Instalacion|registerApp|beforeinstallprompt/)
     const source = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8')
-    runInNewContext(source, {
-      URL, Response, Request,
-      self: { location: new URL('http://localhost/sw.js?v=test'), addEventListener: (type, handler) => { listeners[type] = handler } },
-      fetch: async () => { throw new Error('offline') },
-      caches: { open: async () => { cacheAccesses++; return { match: async () => new Response('app shell') } } },
-    })
-    let response
-    listeners.fetch({ request: new Request('http://localhost/api/trips/x/reservations', { method: 'POST' }),
-      respondWith: promise => { response = promise } })
-    const offline = await response
-    assert.equal(offline.status, 503)
-    assert.match((await offline.json()).message, /Sin conexión/)
-    assert.equal(cacheAccesses, 0)
-    listeners.fetch({ request: { url: 'http://localhost/', method: 'GET', mode: 'navigate' },
-      respondWith: promise => { response = promise } })
-    assert.equal(await (await response).text(), 'app shell')
+    assert.match(source, /registration\.unregister/)
+    assert.doesNotMatch(source, /addEventListener\('fetch'/)
+    const response = await fetch(base + '/api/session', { headers: { Cookie: cookies['demo-passenger'] } })
+    assert.match(response.headers.get('cache-control'), /no-store/)
+    await response.json()
   })
 
 })

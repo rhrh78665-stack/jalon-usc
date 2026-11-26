@@ -1,3 +1,4 @@
+import { accountRole, requirePassenger } from './roles.js'
 import { lateCancellation } from './penalizaciones.js'
 import { randomUUID } from 'node:crypto'
 import { cotizar, validarParadas } from './itinerarios.js'
@@ -7,7 +8,8 @@ import { requireRule } from './rules.js'
 const campos = `r.id, r.trip_id AS "tripId", r.status, r.maximum_cop AS "maximumCop",
   t.route -> r.board_index AS origin, t.route -> r.alight_index AS destination,
   t.itinerary -> r.board_index ->> 'estimatedAt' AS "boardAt",
-  t.itinerary -> r.alight_index ->> 'estimatedAt' AS "alightAt"`
+  t.itinerary -> r.alight_index ->> 'estimatedAt' AS "alightAt",
+  t.itinerary -> r.board_index ->> 'name' AS "originName", t.itinerary -> r.alight_index ->> 'name' AS "destinationName"`
 
 async function cargarViaje(tx, id) {
   const { rows: [trip] } = await tx.query(
@@ -26,10 +28,11 @@ function verificarApertura(trip) {
 
 async function habilitarPasajero(tx, id) {
   const { rows: [passenger] } = await tx.query(
-    `SELECT status, mobility, suspended_until > clock_timestamp() AS suspended
+    `SELECT status, mobility, suspended_until > clock_timestamp() AS suspended,
+       EXISTS (SELECT 1 FROM driver_permissions p WHERE p.user_id=users.id) AS "driverAssigned"
      FROM users WHERE id = $1 FOR UPDATE`, [id],
   )
-  requireRule(passenger?.status === 'approved' && !passenger.mobility && !passenger.suspended,
+  requireRule(passenger?.status === 'approved' && !passenger.mobility && !passenger.driverAssigned && !passenger.suspended,
     'La cuenta del pasajero no está habilitada para reservar.', 403)
 }
 
@@ -74,7 +77,9 @@ export function mountReservations(app, db, approvedSession, informar) {
   app.locals.expirarReservas = expirar
 
   app.get('/api/reservations', async (req, res) => {
-    const { id } = await approvedSession(req)
+    const user = await approvedSession(req)
+    if (user.mobility) return res.json([])
+    const role = accountRole(user), { id } = user
     await expirar()
     const { rows } = await db.query(
       `SELECT ${campos}, (t.driver_id = $1) AS "canDecide",
@@ -92,22 +97,24 @@ export function mountReservations(app, db, approvedSession, informar) {
        LEFT JOIN compensations c ON c.reservation_id = r.id
        JOIN users counterpart ON counterpart.id = CASE WHEN t.driver_id = $1 THEN r.passenger_id ELSE t.driver_id END
        LEFT JOIN ratings q ON q.trip_id = t.id AND q.author_id = $1 AND q.target_id = counterpart.id
-       WHERE r.passenger_id = $1 OR t.driver_id = $1
-       ORDER BY t.depart_at, r.id`, [id],
+       WHERE ($2 = 'pasajero' AND r.passenger_id = $1) OR ($2 = 'conductor' AND t.driver_id = $1)
+       ORDER BY t.depart_at, r.id`, [id, role],
     )
     res.json(rows)
   })
 
   app.post('/api/trips/:id/reservations', async (req, res) => {
-    const { id } = await approvedSession(req)
+    const user = await approvedSession(req)
+    requirePassenger(user)
+    const { id } = user
     requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
     await expirar()
     const { origin, destination } = req.body ?? {}
-    validarParadas(origin, destination)
 
     const { booking, driverId } = await db.transaction(async tx => {
       const trip = await cargarViaje(tx, req.params.id)
       verificarApertura(trip)
+      validarParadas(origin, destination, trip.itinerary)
       requireRule(trip.driverId !== id, 'No puedes solicitar un asiento en tu propio viaje.', 403)
       await habilitarPasajero(tx, id)
       const quote = cotizar(trip, await confirmadas(tx, trip.id), origin, destination)

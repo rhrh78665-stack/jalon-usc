@@ -5,8 +5,8 @@ export function configureTransport(app) {
   app.use((req, res, next) => {
     res.set({
       'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'same-origin',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
     })
     if (production && !req.secure) {

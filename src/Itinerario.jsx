@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { itineraryPoints, pointName } from '../shared/route-points.js'
 import MapaParadas from './MapaParadas.jsx'
 import { paradas } from '../shared/paradas.js'
 
@@ -13,8 +14,18 @@ export async function api(url, options) {
   if (options?.method && options.method !== 'GET' && !navigator.onLine) {
     throw new Error('Sin conexión. Conéctate para consultar o guardar cambios.')
   }
-  const response = await fetch(url, options)
-  const result = await response.json()
+  let response
+  for (let attempt=0; attempt<2; attempt++) {
+    try { response = await fetch(url, options); break }
+    catch (error) {
+      if (options?.signal?.aborted || error.name === 'AbortError') throw error
+      if ((options?.method && options.method !== 'GET') || attempt) throw new Error('El servidor de Jalón USC no responde. Comprueba que siga ejecutándose y vuelve a intentar.')
+      await new Promise(resolve => setTimeout(resolve, 400))
+    }
+  }
+  if (response.status === 204) return null
+  let result
+  try { result = await response.json() } catch { throw new Error('No pudimos leer la respuesta del servidor. Actualiza la página y vuelve a intentar.') }
   if (!response.ok) throw new Error(result.message || 'No se pudo completar la solicitud.')
   return result
 }
@@ -23,21 +34,18 @@ export default function Itinerario({ trip }) {
   if (!trip.itinerary?.length) {
     return <p>{trip.route.map(id => nombreParada[id] ?? id).join(' → ')}. Edita el viaje para completar sus horarios.</p>
   }
-  const total = trip.itinerary.reduce((sum, stop) => sum + (stop.costToNextCop ?? 0), 0)
   return (
     <>
-      <MapaParadas stops={trip.itinerary.map(stop => stop.stopId)} />
+      <MapaParadas snapshot={trip.roadMap || trip.pricing?.roadMap} stops={trip.itinerary.map(stop => stop.stopId)} points={itineraryPoints(trip)} />
       <ol className="itinerary" aria-label="Itinerario del viaje">
         {trip.itinerary.map(stop => (
           <li key={stop.stopId}>
-            <strong>{nombreParada[stop.stopId]}</strong> · {horaLocal.format(new Date(stop.estimatedAt))}
-            {stop.distanceToNextKm !== null && (
-              <small>Costo del tramo {pesos.format(stop.costToNextCop)}</small>
-            )}
+            <strong>{pointName(trip, stop.stopId)}</strong> · {horaLocal.format(new Date(stop.estimatedAt))}
+
           </li>
         ))}
       </ol>
-      <p>Costo de operación del viaje: {pesos.format(total)}</p>
+
     </>
   )
 }

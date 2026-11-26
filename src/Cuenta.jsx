@@ -127,7 +127,7 @@ export function Perfil() {
       <Reputacion />
       {profile && (
         <form onSubmit={save} key={JSON.stringify(profile)}>
-          <label htmlFor="profile-alias">Alias visible</label>
+          <label htmlFor="profile-alias">Nombre visible en los viajes</label>
           <input id="profile-alias" name="alias" defaultValue={profile.alias}
             minLength={2} maxLength={40} required />
           <label>

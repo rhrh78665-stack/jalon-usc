@@ -69,7 +69,6 @@ test('CP-F010 Publicar viaje', async t => {
     { departAt: '2000-01-01T10:00' },
     { departAt: '2099-02-30T10:00' },
     { route: ['melendez', 'lido'] },
-    { route: ['usc', 'lido', 'unicentro'] },
     { route: ['usc', 'lido', 'usc'] },
   ]) {
     assert.equal((await publish(driver, { ...valid, ...changes })).status, 400)
@@ -86,5 +85,5 @@ test('CP-F010 Publicar viaje', async t => {
   assert.equal(trip.status, 'Programado')
   assert.deepEqual(trip.itinerary.map(stop => stop.estimatedAt), stopTimes.map(value => new Date(value + ':00-05:00').toISOString()))
   assert.deepEqual(await (await request('/api/trips/mine', driver)).json(), [trip])
-  assert.deepEqual(await (await request('/api/trips/mine', member)).json(), [])
+  assert.equal((await request('/api/trips/mine', member)).status, 403)
 })

@@ -1,3 +1,4 @@
+import { pointName } from '../shared/route-points.js'
 import React, { useEffect, useState } from 'react'
 import { api, nombreParada, pesos } from './Itinerario.jsx'
 
@@ -66,14 +67,12 @@ export default function CierreViaje({ trip }) {
       )}
       {trip.status === 'Completado' && cierre?.liquidation && (
         <div>
-          <p>Costo total: {pesos.format(cierre.liquidation.totalCop)} · Aporte conductor: {pesos.format(cierre.liquidation.conductorCop)}</p>
+          <p>{['fixed-fare','distance-v2'].includes(cierre.liquidation.mode) ? 'Total de los pasajeros: ' : 'Total liquidado: '}{pesos.format(cierre.liquidation.totalCop)}</p>
           {cierre.liquidation.tramos && (
             <ul aria-label="Desglose de liquidación">
               {cierre.liquidation.tramos.map(tramo => (
                 <li key={tramo.desde}>
-                  {nombreParada[tramo.desde]} → {nombreParada[tramo.hasta]} · costo {pesos.format(tramo.costoCop)}
-                  {' · conductor '}{pesos.format(tramo.conductorCop)}
-                  {' · pasajeros '}{pesos.format(tramo.costoCop - tramo.conductorCop)}
+                  {pointName(trip,tramo.desde)} → {pointName(trip,tramo.hasta)} · {pesos.format(tramo.recaudoCop ?? (tramo.costoCop - tramo.conductorCop))}
                 </li>
               ))}
             </ul>

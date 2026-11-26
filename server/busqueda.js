@@ -1,3 +1,4 @@
+import { journeyIdentity } from './presentacion-viaje.js'
 import { cotizar, diferenciaHorario, horaLocal } from './itinerarios.js'
 
 export function tripSearch(db) {
@@ -7,8 +8,10 @@ export function tripSearch(db) {
   async function load({ origin, destination, date, target }) {
     return db.transaction(async tx => {
       const { rows: trips } = await tx.query(
-        `SELECT id, driver_id AS "driverId", depart_at AS "departAt", capacity, route, status, itinerary
-         FROM trips WHERE status IN ('Programado', 'Lleno') AND depart_at > clock_timestamp()
+        `SELECT t.id, t.driver_id AS "driverId", t.depart_at AS "departAt", t.capacity, t.route, t.status, t.itinerary,
+           v.id AS "vehicleId", v.brand, v.model, v.color, v.plate, v.photo_data IS NOT NULL AS "hasPhoto",
+           v.photo_reference AS "photoReference", u.alias AS "driverName"
+         FROM trips t JOIN users u ON u.id = t.driver_id JOIN vehicles v ON v.id = t.vehicle_id WHERE t.status IN ('Programado', 'Lleno') AND depart_at > clock_timestamp()
          AND jsonb_array_length(itinerary) >= 2 AND route @> $1::jsonb`,
         [JSON.stringify([origin, destination])],
       )
@@ -58,7 +61,7 @@ export function tripSearch(db) {
       const result = {
         page, pageSize, total: matches.length,
         items: matches.slice((page - 1) * pageSize, page * pageSize).map(({ trip, quote }) => ({
-          id: trip.id, departAt: trip.departAt, route: trip.route, itinerary: trip.itinerary, status: trip.status, ...quote,
+          id: trip.id, departAt: trip.departAt, route: trip.route, itinerary: trip.itinerary, status: trip.status, ...quote, ...journeyIdentity(trip),
         })),
       }
       if (loaded.pages.size >= 128) loaded.pages.delete(loaded.pages.keys().next().value)

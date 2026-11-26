@@ -111,7 +111,9 @@ export function mountMobility(app, db, approvedSession) {
         requireRule(req.is('application/json'), 'Envía un cuerpo JSON.', 415)
 
         const expiresOn = licenseDate(req.body?.expiresOn)
-        const { rows: [permission] } = await db.query(
+        const permission = await db.transaction(async tx => {
+            await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [req.params.id])
+            const { rows: [permission] } = await tx.query(
             `INSERT INTO driver_permissions (user_id, reviewer_id, license_expires_on)
        SELECT id, $2, $3::date FROM users
        WHERE id = $1 AND status = 'approved' AND mobility = false
@@ -123,6 +125,9 @@ export function mountMobility(app, db, approvedSession) {
        RETURNING user_id`,
             [req.params.id, req.reviewerId, expiresOn],
         )
+
+            return permission
+        })
 
         requireRule(permission, 'La cuenta debe estar aprobada y la licencia vigente.', 409)
         res.json({ id: permission.user_id, expiresOn, enabled: true })

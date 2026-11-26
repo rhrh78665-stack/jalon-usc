@@ -1,3 +1,5 @@
+import { accountRole } from './roles.js'
+import { createRoadService, mountRoadMap } from './mapa-vial.js'
 import { configurarCorreo } from './correo.js'
 import express from 'express'
 import { logRequestError } from './registro.js'
@@ -44,7 +46,9 @@ async function approvedSession(db, req) {
     requireRule(token, 'Sesión no activa.', 401)
 
     const { rows: [user] } = await db.query(
-        `SELECT users.id, users.email, users.mobility FROM sessions
+        `SELECT users.id, users.email, users.mobility,
+         EXISTS (SELECT 1 FROM driver_permissions p WHERE p.user_id = users.id) AS "driverAssigned",
+         EXISTS (SELECT 1 FROM driver_permissions p WHERE p.user_id = users.id AND p.license_expires_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date) AS driver FROM sessions
      JOIN users ON users.id = sessions.user_id
      WHERE sessions.token_hash = $1
        AND sessions.expires_at > CURRENT_TIMESTAMP
@@ -57,10 +61,10 @@ async function approvedSession(db, req) {
 }
 
 function sessionView(user) {
-    return user.mobility ? { email: user.email, mobility: true } : { email: user.email }
+    return user.mobility ? { email: user.email, mobility: true } : { email: user.email, ...(accountRole(user) === 'conductor' && { driver: true, ...(!user.driver && { driverExpired: true }) }) }
 }
 
-export function createApp(db, dist, mail = configurarCorreo(process.env, Number(process.env.PORT ?? 3000))) {
+export function createApp(db, dist, mail = configurarCorreo(process.env, Number(process.env.PORT ?? 3000)), options = {}) {
     const app = express()
     app.locals.procesarAvisos = notificationWorker(db, mail)
     app.disable('x-powered-by')
@@ -69,6 +73,7 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
         res.set('Cache-Control', 'no-store')
         next()
     })
+    app.use('/api/vehicles', express.json({ limit: '512kb' }))
     app.use('/api', express.json({ limit: '8kb' }))
 
     app.get('/api/health', async (_req, res) => {
@@ -103,7 +108,10 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
         )
         const email = institutionalEmail(req.body.email)
         const { rows: [user] } = await db.query(
-            'SELECT id, email, password, status, mobility FROM users WHERE email = $1',
+            `SELECT id, email, password, status, mobility,
+              EXISTS (SELECT 1 FROM driver_permissions p WHERE p.user_id = users.id) AS "driverAssigned",
+              EXISTS (SELECT 1 FROM driver_permissions p WHERE p.user_id=users.id AND p.license_expires_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bogota')::date) AS driver
+             FROM users WHERE email = $1`,
             [email],
         )
         requireRule(!await accountBlocked(db, email), 'Acceso bloqueado temporalmente. Intenta en 15 minutos.', 429)
@@ -152,7 +160,9 @@ export function createApp(db, dist, mail = configurarCorreo(process.env, Number(
 
     mountMobility(app, db, req => approvedSession(db, req))
     mountVehicles(app, db, req => approvedSession(db, req))
-  mountTrips(app, db, req => approvedSession(db, req))
+  const roadService = createRoadService(options.routing)
+  mountRoadMap(app, req => approvedSession(db, req), { route: roadService })
+  mountTrips(app, db, req => approvedSession(db, req), { roadService })
   mountProfile(app, db, req => approvedSession(db, req))
   mountRecovery(app, db, mail)
   mountVerification(app, db, mail)

@@ -172,11 +172,11 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
     const result = await close(completed, [{ id: member.id, attendance: 'Abordo' }, { id: absent.id, attendance: 'Ausente' }])
     assert.equal(result.status, 200, JSON.stringify(result.data))
     const liquidation = result.data.liquidation
-    assert.equal(liquidation.aportes[member.id], 1250)
+    assert.equal(liquidation.aportes[member.id], 11000)
     assert.equal(liquidation.aportes[absent.id], 0)
-    assert.equal(liquidation.conductorCop, 1250)
+    assert.equal(liquidation.conductorCop, 0)
     assert.deepEqual(liquidation.tramos.map(t => t.costoCop), [1500, 1000])
-    assert.equal((await bandeja('passenger')).data.find(r => r.id === member.id).aporteFinalCop, 1250)
+    assert.equal((await bandeja('passenger')).data.find(r => r.id === member.id).aporteFinalCop, 11000)
     assert.equal((await bandeja('other')).data.find(r => r.id === absent.id).aporteFinalCop, 0)
     const retry = await close(completed, [])
     assert.deepEqual(retry.data.liquidation, liquidation)
@@ -204,7 +204,7 @@ test('RF-021 a RF-030: reservas, cierre y tarifas', async t => {
   })
 
   await t.test('CP-F028 solo admite monto liquidado y confirma el pasajero correspondiente', async () => {
-    assert.equal((await compensation(member.id, 1251)).status, 409)
+    assert.equal((await compensation(member.id, 22001)).status, 409)
     assert.equal((await compensation(absent.id, 1)).status, 409)
     assert.equal((await compensation(member.id, 1000, 'other')).status, 403)
     assert.equal((await compensation(member.id, 1000)).status, 201)

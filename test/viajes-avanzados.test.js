@@ -72,8 +72,7 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     const { rows: [before] } = await db.query('SELECT COUNT(*)::int AS count FROM trips')
     for (const changes of [
       { route: ['melendez', 'melendez', 'usc'] },
-      { route: ['usc', 'lido', 'unicentro'] },
-      { route: ['unknown', 'lido', 'usc'] },
+        { route: ['unknown', 'lido', 'usc'] },
       { stopTimes: undefined }, { stopTimes: [] },
       { stopTimes: [date + 'T06:00', date + 'T06:00', date + 'T06:40'] },
       { stopTimes: [date + 'T06:00', date + 'T05:50', date + 'T06:40'] },
@@ -107,14 +106,14 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     for (let i = 0; i < 3; i++) await publish(valid(day))
     const first = await request(searchPath(day, { pageSize: '2' }), { user: 'passenger' })
     const second = await request(searchPath(day, { pageSize: '2', page: '2' }), { user: 'passenger' })
-    assert.equal((await request(searchPath(day), { user: 'driver' })).data.total, 0)
+    assert.equal((await request(searchPath(day), { user: 'driver' })).status, 403)
     assert.equal(first.data.total, 3)
     assert.equal(first.data.items.length, 2)
     assert.equal(second.data.items.length, 1)
     assert.equal(new Set([...first.data.items, ...second.data.items].map(trip => trip.id)).size, 3)
     for (const trip of first.data.items) for (const field of ['driverId', 'vehicleId', 'passengerId', 'email', 'reservations']) assert.equal(field in trip, false)
-    assert.equal((await request(searchPath(day, { page: '-1' }))).status, 400)
-    assert.equal((await request(searchPath('2035-02-30'))).status, 400)
+    assert.equal((await request(searchPath(day, { page: '-1' }), { user: 'passenger' })).status, 400)
+    assert.equal((await request(searchPath('2035-02-30'), { user: 'passenger' })).status, 400)
     assert.equal((await request(searchPath(day), { user: null })).status, 401)
   })
 
@@ -148,8 +147,8 @@ test('RF-011 a RF-017: itinerarios, búsqueda y gestión de viajes', async t => 
     await booking(trip, { start: 1, end: 2 })
     const result = await request(detailPath(trip.id), { user: 'passenger' })
     assert.equal(result.status, 200)
-    assert.equal(result.data.maximumCop, 1250)
-    assert.equal(result.data.estimatedCop, 1083)
+    assert.equal(result.data.maximumCop, 11000)
+    assert.equal(result.data.estimatedCop, 11000)
     assert.equal(result.data.segments.length, 2)
     assert.equal((await request(detailPath(trip.id, 'usc', 'melendez'))).status, 400)
     assert.equal((await request(detailPath(trip.id), { user: null })).status, 401)

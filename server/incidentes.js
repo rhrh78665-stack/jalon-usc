@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 
 const fields = `i.id, i.trip_id AS "tripId", i.category, i.description, i.status,
-  i.created_at AS "createdAt", t.route, i.decision, i.resolution, i.resolved_at AS "resolvedAt",
+  i.created_at AS "createdAt", t.route, t.itinerary, i.decision, i.resolution, i.resolved_at AS "resolvedAt",
   reviewer.alias AS reviewer`
 
 export function mountIncidents(app, db, approvedSession) {
   app.get('/api/incidents/trips', async (req, res) => {
     const user = await approvedSession(req)
     const { rows } = await db.query(
-      `SELECT t.id, t.route, t.depart_at AS "departAt" FROM trips t
+      `SELECT t.id, t.route, t.itinerary, t.depart_at AS "departAt" FROM trips t
        WHERE t.driver_id = $1 OR EXISTS (
          SELECT 1 FROM reservations r WHERE r.trip_id = t.id
          AND r.passenger_id = $1 AND r.status = 'Confirmada')

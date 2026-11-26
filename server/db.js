@@ -74,6 +74,12 @@ export async function openDatabase(path) {
       )
     );
 
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS brand text NOT NULL DEFAULT '';
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS model text NOT NULL DEFAULT '';
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS color text NOT NULL DEFAULT '';
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS photo_data text;
+    ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS photo_reference boolean NOT NULL DEFAULT false;
+
     CREATE INDEX IF NOT EXISTS vehicles_user_id_idx ON vehicles (user_id);
 
     CREATE TABLE IF NOT EXISTS trips (
@@ -136,6 +142,7 @@ export async function openDatabase(path) {
       configured_by text NOT NULL REFERENCES users(id),
       created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    ALTER TABLE trip_tariffs ADD COLUMN IF NOT EXISTS fare jsonb;
     CREATE TABLE IF NOT EXISTS ratings (
       trip_id text NOT NULL REFERENCES trips(id),
       author_id text NOT NULL REFERENCES users(id),

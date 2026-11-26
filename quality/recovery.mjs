@@ -16,6 +16,7 @@ if (process.argv[2] === 'restore') {
   try {
     db = await openDatabase(join(folder, 'source'))
     await seedDemo(db)
+    const expectedUsers = (await db.query('SELECT id FROM users ORDER BY id')).rows
     const expectedTrips = (await db.query('SELECT count(*)::int AS n FROM trips')).rows[0].n
     const snapshot = await backupDatabase(db, join(folder, 'backups'))
     const started = Date.now()
@@ -24,7 +25,7 @@ if (process.argv[2] === 'restore') {
     await restoreDatabase(snapshot.file, destination)
     restored = await openDatabase(destination)
     const rows = (await restored.query('SELECT id FROM users ORDER BY id')).rows
-    assert.deepEqual(rows.map(row => row.id), ['demo-driver', 'demo-mobility', 'demo-passenger', 'demo-second'])
+    assert.deepEqual(rows, expectedUsers)
     assert.equal((await restored.query("SELECT count(*)::int AS n FROM trips")).rows[0].n, expectedTrips)
     const rtoSeconds = (Date.now() - started) / 1000
     const rpoSeconds = (started - Date.parse(snapshot.snapshotStartedAt)) / 1000

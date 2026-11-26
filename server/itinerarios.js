@@ -1,7 +1,9 @@
 import { paradas, tramos } from '../shared/paradas.js'
+import { distanceFare } from './precio-recorrido.js'
+import { validFare } from '../shared/fare-policy.js'
+import { selectedPoints, routeCatalog } from './puntos-recorrido.js'
 import { requireRule } from './rules.js'
 
-const validStops = new Set(paradas.map(({ id }) => id))
 const minute = 60 * 1000
 
 export function horaBogota(value) {
@@ -20,17 +22,18 @@ export function horaLocal(value) {
   return new Date(new Date(value).getTime() - 5 * 60 * minute).toISOString().slice(0, 16)
 }
 
-export function validarParadas(origin, destination) {
-  requireRule(validStops.has(origin) && validStops.has(destination) && origin !== destination,
+export function validarParadas(origin, destination, stops = paradas) {
+  const allowed = new Set(stops.map(point => point.id ?? point.stopId))
+  requireRule(allowed.has(origin) && allowed.has(destination) && origin !== destination,
     'Selecciona dos paradas distintas del catálogo.')
 }
 
-export function crearItinerario(route, stopTimes, departure, catalog = tramos) {
+export function crearItinerario(route, stopTimes, departure, catalog = tramos, stops = paradas) {
+  const allowed = new Map(stops.map(point => [point.id, point]))
   requireRule(
-    Array.isArray(route) && route.length >= 2 && route.length <= paradas.length &&
-      new Set(route).size === route.length && route.every(id => validStops.has(id)) &&
-      (route[0] === 'usc' || route.at(-1) === 'usc'),
-    'Selecciona paradas distintas con la USC en un extremo.',
+    Array.isArray(route) && route.length >= 2 && route.length <= 10 &&
+      new Set(route).size === route.length && route.every(id => allowed.has(id)),
+    'Selecciona entre dos y diez paradas distintas dentro de Cali.',
   )
   requireRule(Array.isArray(stopTimes) && stopTimes.length === route.length,
     'Indica una hora estimada para cada parada.')
@@ -50,7 +53,8 @@ export function crearItinerario(route, stopTimes, departure, catalog = tramos) {
         'El peaje del tramo no es válido.')
     }
     return {
-      position, stopId, estimatedAt: times[position],
+      position, stopId, estimatedAt: times[position], name: allowed.get(stopId).nombre,
+      latitude: allowed.get(stopId).latitude, longitude: allowed.get(stopId).longitude,
       distanceToNextKm: next ? segment.distanceKm : null,
       tollToNextCop: next ? segment.tollCop : null,
       costToNextCop: null,
@@ -58,7 +62,8 @@ export function crearItinerario(route, stopTimes, departure, catalog = tramos) {
   })
 }
 
-export function fijarCostos(itinerary, efficiency, fuelPriceCopPerGallon) {
+export function fijarCostos(itinerary, efficiency, fuelPriceCopPerGallon, fare = null, fareModel = 'fixed-v1') {
+  requireRule(fare === null || validFare(fare), 'La tarifa por cupo no es válida.')
   requireRule(Number.isFinite(efficiency) && efficiency > 0, 'El rendimiento del vehículo no es válido.')
   requireRule(Number.isSafeInteger(fuelPriceCopPerGallon) && fuelPriceCopPerGallon > 0,
     'Indica un precio del galón entero y mayor que cero.')
@@ -70,10 +75,12 @@ export function fijarCostos(itinerary, efficiency, fuelPriceCopPerGallon) {
     const cost = Math.round(stop.distanceToNextKm / efficiency * fuelPriceCopPerGallon + stop.tollToNextCop)
     requireRule(Number.isSafeInteger(cost) && cost >= 0 && cost <= 2147483647,
       'El costo del tramo supera el límite permitido.')
-    return { ...stop, costToNextCop: cost }
+    const fareToNextCop = fare ? (fareModel === 'distance-v2' ? Math.ceil(stop.distanceToNextKm * fare.perKmCop) : Math.max(fare.minimumCop, Math.ceil(stop.distanceToNextKm * fare.perKmCop / 500) * 500)) : null
+    requireRule(!fare || (Number.isSafeInteger(fareToNextCop) && fareToNextCop <= 2147483647), 'La tarifa del tramo supera el límite permitido.')
+    return { ...stop, costToNextCop: cost, ...(fare && { fareToNextCop, ...(fareModel === 'distance-v2' && { fareModel, minimumFareCop: fare.minimumCop, farePerKmCop: fare.perKmCop }) }) }
   })
   const totalCostCop = result.reduce((sum, stop) => sum + (stop.costToNextCop ?? 0), 0)
-  return { itinerary: result, pricing: { currency: 'COP', efficiency, fuelPriceCopPerGallon, totalCostCop } }
+  return { itinerary: result, pricing: { currency: 'COP', efficiency, fuelPriceCopPerGallon, totalCostCop, ...(fare && { fare: { ...fare }, fareModel }) } }
 }
 
 export function cotizar(trip, reservations, origin, destination) {
@@ -91,16 +98,18 @@ export function cotizar(trip, reservations, origin, destination) {
       from: stop.stopId, to: trip.route[stop.position + 1],
       distanceKm: stop.distanceToNextKm, costCop: stop.costToNextCop,
       availableSeats: Math.max(0, trip.capacity - occupants),
-      estimatedCop: Math.floor(stop.costToNextCop / (occupants + 2)),
-      maximumCop: Math.floor(stop.costToNextCop / 2),
+      estimatedCop: stop.fareToNextCop ?? Math.floor(stop.costToNextCop / (occupants + 2)),
+      maximumCop: stop.fareToNextCop ?? Math.floor(stop.costToNextCop / 2),
     }
   })
   return {
     boardAt: trip.itinerary[start].estimatedAt,
     alightAt: trip.itinerary[end].estimatedAt,
     availableSeats: Math.min(...segments.map(segment => segment.availableSeats)),
-    estimatedCop: segments.reduce((sum, segment) => sum + segment.estimatedCop, 0),
-    maximumCop: segments.reduce((sum, segment) => sum + segment.maximumCop, 0),
+    estimatedCop: trip.itinerary[0].fareModel === 'distance-v2' ? distanceFare(trip.itinerary,start,end) : segments.reduce((sum, segment) => sum + segment.estimatedCop, 0),
+    maximumCop: trip.itinerary[0].fareModel === 'distance-v2' ? distanceFare(trip.itinerary,start,end) : segments.reduce((sum, segment) => sum + segment.maximumCop, 0),
+    distanceKm: segments.reduce((sum,s) => sum+s.distanceKm,0),
+    fareModel: trip.itinerary[0].fareModel ?? 'legacy',
     segments,
   }
 }
@@ -117,7 +126,8 @@ export function fechasSerie(body) {
   requireRule(Array.isArray(body.dates) && body.dates.length > 0 && body.dates.length <= 30 &&
     new Set(body.dates).size === body.dates.length, 'Selecciona entre 1 y 30 fechas distintas.')
   const base = horaBogota(body.departAt)
-  crearItinerario(body.route, body.stopTimes, base)
+  const points = selectedPoints(body.route, body.routePoints ?? [])
+  crearItinerario(body.route, body.stopTimes, base, routeCatalog(points), points)
   return body.dates.map(date => {
     requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Una fecha de la serie no es válida.')
     const departAt = date + 'T' + body.departAt.slice(11)

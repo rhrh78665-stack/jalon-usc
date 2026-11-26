@@ -2,7 +2,10 @@ import Reputacion from './Reputacion.jsx'
 import React, { useEffect, useState } from 'react'
 import { api, horaLocal, nombreParada, pesos } from './Itinerario.jsx'
 
-export default function Reservas() {
+export default function Reservas({initialFilter='todas',navigationId,role='pasajero'}) {
+  const driver=role==='conductor'
+  const [tab,setTab]=useState(initialFilter || 'todas')
+  useEffect(()=>setTab(initialFilter || 'todas'),[initialFilter,navigationId])
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(null)
@@ -31,7 +34,7 @@ export default function Reservas() {
       window.removeEventListener('jalon-reservas-update', cargar)
       window.removeEventListener('jalon-trips-update', cargar)
     }
-  }, [])
+  }, [role])
 
   async function actualizar(id, action, options) {
     setSaving(id)
@@ -54,18 +57,20 @@ export default function Reservas() {
 
   return (
     <section aria-labelledby="reservations-heading">
-      <h2 id="reservations-heading">Reservas</h2>
+      <header className="page-heading"><div><span className="card-eyebrow">{driver?'Pasajeros para tus recorridos':'Tu asiento, en un mismo lugar'}</span><h2 id="reservations-heading">{driver?'Solicitudes recibidas.':'Mis reservas.'}</h2><p>{driver?'Revisa y responde las solicitudes recibidas para las ofertas que tú publicaste.':'Consulta las respuestas de tus conductores y los estados de cada recorrido.'}</p></div></header>
+      <div className="section-subtabs" aria-label="Estado de reservas">{[['todas',driver?'Todas las solicitudes':'Todas'],['Pendiente',driver?'Por responder':'Pendientes'],['Confirmada',driver?'Pasajeros confirmados':'Confirmadas'],['cerradas',driver?'Rechazadas y cerradas':'Canceladas y vencidas']].map(([id,label])=><button key={id} type="button" aria-pressed={tab===id} onClick={()=>setTab(id)}>{label}</button>)}</div>
       {error && <p role="alert">{error}</p>}
-      {!items.length && !error && <p>Aún no hay reservas.</p>}
+      {!items.length && !error && <p>{driver?'Aún no has recibido solicitudes para tus ofertas.':'Aún no hay reservas.'}</p>}
       <ul className="trip-list" aria-live="polite">
-        {items.map(booking => (
+        {items.filter(b=>Boolean(b.canDecide)===driver).filter(b=>tab==='todas' || (tab==='cerradas' ? !['Pendiente','Confirmada'].includes(b.status) : b.status===tab)).map(booking => (
           <li key={booking.id} data-reservation-id={booking.id}>
-            <strong>{nombreParada[booking.origin]} → {nombreParada[booking.destination]}</strong>
-            <p>{booking.canDecide ? 'Solicitud recibida' : 'Mi solicitud'}{' '}<span className="booking-status" data-status={booking.status}>{booking.status}</span></p>
+            <p className="request-counterpart">{driver?'Pasajero':'Conductor'}: <b>{booking.contraparte}</b></p>
+            <strong>{booking.originName || nombreParada[booking.origin]} → {booking.destinationName || nombreParada[booking.destination]}</strong>
+            <p>{driver ? 'Solicitud recibida' : 'Mi reserva'}{' '}<span className="booking-status" data-status={booking.status}>{booking.status}</span></p>
             {booking.boardAt && <p>Recogida: {horaLocal.format(new Date(booking.boardAt))}</p>}
             <Reputacion userId={booking.counterpartId} />
-            <p>Aporte máximo: {pesos.format(booking.maximumCop)}</p>
-            {booking.aporteFinalCop != null && <p>Aporte definitivo: {pesos.format(booking.aporteFinalCop)}</p>}
+            <p>Valor reservado: {pesos.format(booking.maximumCop)}</p>
+            {booking.aporteFinalCop != null && <p>Valor final: {pesos.format(booking.aporteFinalCop)}</p>}
             {booking.compensacionCop != null && (
               <p>Pago externo registrado: {pesos.format(booking.compensacionCop)} · {booking.compensacionConfirmadaEn ? 'Confirmado' : 'Pendiente de confirmación'}</p>
             )}
@@ -114,7 +119,7 @@ export default function Reservas() {
             )}
             {booking.canDecide && booking.status === 'Pendiente' && (
               <div className="actions">
-                <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'confirmar')}>Confirmar</button>
+                <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'confirmar')}>Confirmar asiento</button>
                 <button type="button" disabled={saving !== null} onClick={() => decidir(booking.id, 'rechazar')}>Rechazar</button>
               </div>
             )}

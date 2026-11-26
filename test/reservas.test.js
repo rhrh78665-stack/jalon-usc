@@ -61,8 +61,7 @@ test('RF-018 a RF-020: solicitudes y decisiones de reserva', async t => {
     assert.deepEqual(requests.map(r => r.status).sort(), [201, 409])
     const saved = requests.find(r => r.status === 201).data
     assert.equal(saved.status, 'Pendiente')
-    assert.equal(saved.maximumCop, trip.itinerary.slice(0, -1)
-      .reduce((sum, stop) => sum + Math.floor(stop.costToNextCop / 2), 0))
+    assert.equal(saved.maximumCop, 11000)
     assert.equal(saved.origin, 'melendez')
     const query = new URLSearchParams({ origin: 'melendez', destination: 'usc' })
     assert.equal((await request(`/api/trips/${trip.id}?${query}`, { user: 'other' })).data.availableSeats, 1)

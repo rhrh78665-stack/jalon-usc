@@ -1,8 +1,14 @@
+import { accountRole, requirePassenger, requireConductor } from './roles.js'
+import { createJourneyPlans, mountJourneyPlans } from './planes-recorrido.js'
+import { selectedPoints, routeCatalog } from './puntos-recorrido.js'
+import { defaultFare } from '../shared/fare-policy.js'
+import { mountHistory } from './historial.js'
+import { journeyProfile } from './presentacion-viaje.js'
+import { mountJourneyBoard } from './cartelera.js'
 import { tripSearch } from './busqueda.js'
 import { randomUUID } from 'node:crypto'
 import { requireRule } from './rules.js'
 import { tarifaVigente, mountTariffs } from './tarifas.js'
-import { tramos } from '../shared/paradas.js'
 import { requireDriver } from './vehiculos.js'
 import { mountReservations } from './reservas.js'
 import { mountRatings } from './calificaciones.js'
@@ -23,17 +29,17 @@ function jsonBody(req) {
   return req.body
 }
 
-async function preparar(tx, driverId, body, previousPricing) {
+async function preparar(tx, driverId, body, previousPricing, plans) {
   const { vehicleId, departAt, capacity, route, stopTimes, fuelPriceCopPerGallon } = body
   requireRule(typeof vehicleId === 'string' && vehicleId.length > 0, 'Selecciona tu vehículo.')
   requireRule(Number.isInteger(capacity) && capacity > 0, 'Indica una cantidad entera de cupos mayor que cero.')
   const departure = horaBogota(departAt)
   const vigente = await tarifaVigente(tx)
   const tarifa = previousPricing?.tariff ?? (previousPricing ? null : vigente)
-  const catalog = tarifa ? tramos.map(segment => ({
-    ...segment, tollCop: tarifa.tolls[segment.from + ':' + segment.to],
-  })) : tramos
-  const ordered = crearItinerario(route, stopTimes, departure, catalog)
+  const points = selectedPoints(route, body.routePoints ?? [])
+  const plan = body.planId ? plans.resolve(body.planId,driverId,points) : null
+  const catalog = plan ? plan.catalog.map(s => ({...s,tollCop:tarifa?.tolls?.[s.from+':'+s.to]??s.tollCop})) : routeCatalog(points, tarifa?.tolls)
+  const ordered = crearItinerario(route, stopTimes, departure, catalog, points)
   await requireDriver(tx, driverId)
   const { rows: [vehicle] } = await tx.query(
     'SELECT seats, efficiency FROM vehicles WHERE id = $1 AND user_id = $2 FOR SHARE', [vehicleId, driverId],
@@ -42,12 +48,12 @@ async function preparar(tx, driverId, body, previousPricing) {
   requireRule(capacity <= vehicle.seats, 'Los cupos superan la capacidad del vehículo.')
   const fuel = tarifa?.fuelPriceCopPerGallon ??
     (vigente && previousPricing ? previousPricing.fuelPriceCopPerGallon : fuelPriceCopPerGallon)
-  const { itinerary, pricing } = fijarCostos(ordered, vehicle.efficiency, fuel)
-  return { vehicleId, departure, capacity, route, itinerary, pricing: { ...pricing, ...(tarifa && { tariff: tarifa }) } }
+  const { itinerary, pricing } = fijarCostos(ordered, vehicle.efficiency, fuel, previousPricing ? (previousPricing.fare ?? null) : (tarifa?.fare ?? defaultFare), previousPricing ? (previousPricing.fareModel ?? 'fixed-v1') : 'distance-v2')
+  return { vehicleId, departure, capacity, route, itinerary, pricing: { ...pricing, ...(tarifa && { tariff: tarifa }), ...(plan && { roadMap:plan.roadMap,distanceSource:plan.source }) } }
 }
 
-async function crearViaje(tx, driverId, body) {
-  const trip = await preparar(tx, driverId, body)
+async function crearViaje(tx, driverId, body, plans) {
+  const trip = await preparar(tx, driverId, body, undefined, plans)
   const { rows: [saved] } = await tx.query(
     `INSERT INTO trips (id, driver_id, vehicle_id, depart_at, capacity, route, itinerary, pricing)
      SELECT $1, $2, $3, $4::timestamptz, $5, $6::jsonb, $7::jsonb, $8::jsonb
@@ -62,7 +68,7 @@ async function crearViaje(tx, driverId, body) {
 function vistaPublica(trip, quote) {
   return {
     id: trip.id, departAt: trip.departAt, route: trip.route, itinerary: trip.itinerary,
-    status: trip.status, ...quote,
+    status: trip.status, roadMap:trip.pricing?.roadMap??null, ...quote,
   }
 }
 
@@ -73,9 +79,13 @@ function enteroConsulta(value, fallback, max) {
   return Number(value)
 }
 
-export function mountTrips(app, db, approvedSession) {
+export function mountTrips(app, db, approvedSession, { roadService } = {}) {
+  const plans = createJourneyPlans(roadService)
+  mountJourneyPlans(app,db,approvedSession,plans)
   const listeners = new Map()
   const search = tripSearch(db)
+  mountJourneyBoard(app, db, approvedSession)
+  mountHistory(app, db, approvedSession)
 
   // Solo se emiten cambios después de confirmar la transacción y a sus participantes.
 
@@ -129,13 +139,17 @@ export function mountTrips(app, db, approvedSession) {
   })
 
   app.get('/api/trips/mine', async (req, res) => {
-    const { id } = await approvedSession(req)
+    const user = await approvedSession(req)
+    requireConductor(user)
+    const { id } = user
     const { rows } = await db.query(`SELECT ${campos} FROM trips WHERE driver_id = $1 ORDER BY depart_at, id`, [id])
     res.json(rows)
   })
 
   app.get('/api/trips/search', async (req, res) => {
-    const { id } = await approvedSession(req)
+    const user = await approvedSession(req)
+    requirePassenger(user)
+    const { id } = user
     const { origin, destination, date, time } = req.query
     validarParadas(origin, destination)
     requireRule(typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date), 'Selecciona una fecha válida.')
@@ -150,19 +164,22 @@ export function mountTrips(app, db, approvedSession) {
   })
 
   app.get('/api/trips/:id', async (req, res) => {
-    await approvedSession(req)
+    const user = await approvedSession(req)
+    requireRule(accountRole(user) !== 'movilidad', 'Esta consulta pertenece a los participantes del viaje.', 403)
     const { origin, destination } = req.query
-    validarParadas(origin, destination)
     const result = await db.transaction(async tx => {
       const { rows: [trip] } = await tx.query(
         `SELECT ${campos} FROM trips WHERE id = $1 AND status IN ('Programado', 'Lleno')
          AND depart_at > clock_timestamp()`, [req.params.id],
       )
       requireRule(trip, 'El viaje ya no está disponible.', 404)
+      requireRule(accountRole(user) === 'pasajero' || trip.driverId === user.id,
+        'El conductor solo puede consultar sus propios recorridos.', 403)
       const { rows: bookings } = await tx.query("SELECT * FROM reservations WHERE trip_id = $1 AND status = 'Confirmada'", [trip.id])
+      validarParadas(origin, destination, trip.itinerary)
       const quote = cotizar(trip, bookings, origin, destination)
       requireRule(quote.availableSeats > 0, 'No hay cupo en todos los tramos solicitados.', 409)
-      return vistaPublica(trip, quote)
+      return { ...vistaPublica(trip, quote), ...await journeyProfile(tx, trip.id) }
     })
     res.json(result)
   })
@@ -170,7 +187,7 @@ export function mountTrips(app, db, approvedSession) {
   app.post('/api/trips', async (req, res) => {
     const { id } = await approvedSession(req)
     const body = jsonBody(req)
-    const trip = await db.transaction(tx => crearViaje(tx, id, body))
+    const trip = await db.transaction(tx => crearViaje(tx, id, body, plans))
     res.status(201).json(trip)
   })
 
@@ -179,7 +196,7 @@ export function mountTrips(app, db, approvedSession) {
     const bodies = fechasSerie(jsonBody(req))
     const trips = await db.transaction(async tx => {
       const created = []
-      for (const body of bodies) created.push(await crearViaje(tx, id, body))
+      for (const body of bodies) created.push(await crearViaje(tx, id, body, plans))
       return created
     })
     res.status(201).json(trips)
@@ -197,7 +214,7 @@ export function mountTrips(app, db, approvedSession) {
         "SELECT id FROM reservations WHERE trip_id = $1 AND status IN ('Pendiente', 'Confirmada') LIMIT 1", [current.id],
       )
       requireRule(rows.length === 0, 'No puedes editar un viaje con reservas pendientes o confirmadas.', 409)
-      const trip = await preparar(tx, id, body, current.pricing)
+      const trip = await preparar(tx, id, body, current.pricing, plans)
       const { rows: [updated] } = await tx.query(
         `UPDATE trips SET vehicle_id = $2, depart_at = $3::timestamptz, capacity = $4,
          route = $5::jsonb, itinerary = $6::jsonb, pricing = $7::jsonb, status = 'Programado'

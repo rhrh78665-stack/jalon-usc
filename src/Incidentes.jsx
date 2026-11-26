@@ -1,3 +1,4 @@
+import { pointName } from '../shared/route-points.js'
 import React, { useEffect, useState } from 'react'
 import { api, nombreParada, horaLocal } from './Itinerario.jsx'
 
@@ -67,7 +68,7 @@ export default function Incidentes({ mobility }) {
           <select id="incident-trip" name="tripId" defaultValue="" required>
             <option value="" disabled>Selecciona un viaje en el que participas</option>
             {trips.map(trip => <option key={trip.id} value={trip.id}>
-              {trip.route.map(id => nombreParada[id]).join(' → ')} · {horaLocal.format(new Date(trip.departAt))}
+              {pointName(trip,trip.route[0])} → {pointName(trip,trip.route.at(-1))} · {horaLocal.format(new Date(trip.departAt))}
             </option>)}
           </select>
           <label htmlFor="incident-category">Categoría</label>
@@ -84,7 +85,7 @@ export default function Incidentes({ mobility }) {
       {!items.length && <p>No hay reportes en esta bandeja.</p>}
       <ul className="trip-list">{items.map(item => (
         <li key={item.id}>
-          <strong>{item.route.map(id => nombreParada[id]).join(' → ')}</strong>
+          <strong>{pointName(item,item.route[0])} → {pointName(item,item.route.at(-1))}</strong>
           <p>{item.category} · {item.status}</p>
           {item.resolution && <p>Decisión: {item.decision}. {item.resolution} · {item.reviewer || 'Movilidad'} · {horaLocal.format(new Date(item.resolvedAt))}</p>}
           {mobility && item.status === 'Recibido' && (

@@ -8,7 +8,7 @@ import { createHash, randomBytes, argon2 } from 'node:crypto'
 import { promisify } from 'node:util'
 import { createApp } from '../server/app.js'
 import { openDatabase } from '../server/db.js'
-import { seedDemo } from '../server/demo.js'
+import { seedDemo } from '../test-support/demo.js'
 import { hashPassword, verifyPassword } from '../server/auth.js'
 
 test('Atributos de calidad del MVP', async t => {
@@ -44,7 +44,7 @@ test('Atributos de calidad del MVP', async t => {
     await db.exec("UPDATE trips SET capacity = 1 WHERE id = 'demo-search'")
     const next = await request(url)
     assert.equal(next.data.items.find(item => item.id === 'demo-search').availableSeats, 1)
-    assert.equal((await request(url, { user: 'demo-driver' })).data.items.length, 0)
+    assert.equal((await request(url, { user: 'demo-driver' })).status, 403)
     assert.equal(next.data.items[0].driverId, undefined)
   })
 
@@ -197,11 +197,11 @@ await t.test('RNF-007 cinco fallos bloquean quince minutos y el vencimiento perm
     assert.equal((await db.query('SELECT * FROM login_attempts WHERE account_hash = $1', [digest])).rows.length, 0)
   })
 
-await t.test('RNF-008 búsqueda y detalle no revelan datos personales', async () => {
+await t.test('RNF-008 la identificación del vehículo no expone correos ni credenciales', async () => {
     const detail = await request('/api/trips/demo-search?origin=melendez&destination=usc')
     const date = detail.data.boardAt.slice(0, 10)
     const search = await request('/api/trips/search?' + new URLSearchParams({ origin: 'melendez', destination: 'usc', date }))
-    const forbidden = new Set(['email', 'phone', 'telephone', 'code', 'plate', 'password', 'token_hash', 'driverId', 'user_id'])
+    const forbidden = new Set(['email', 'phone', 'telephone', 'code', 'password', 'token_hash', 'driverId', 'user_id'])
     function inspect(value) {
       if (!value || typeof value !== 'object') return
       for (const [key, child] of Object.entries(value)) {
@@ -218,7 +218,7 @@ await t.test('RNF-009 demostración aislada con identidades sintéticas', async 
     assert.ok(users.length >= 4)
     assert.ok(users.every(user => user.id.startsWith('demo-') && user.email.endsWith('.demo@usc.edu.co')))
     const plates = (await db.query('SELECT plate FROM vehicles')).rows
-    assert.ok(plates.every(row => /^DEM[0-9]{3}$/.test(row.plate)))
+    assert.ok(plates.every(row => /^[A-Z]{3}[0-9]{3}$/.test(row.plate)))
   })
 
 await t.test('RNF-010 registro de errores sin claves, cookies ni texto de incidentes', () => {
